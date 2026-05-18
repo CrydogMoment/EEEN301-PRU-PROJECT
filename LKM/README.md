@@ -5,10 +5,10 @@
 - Build with `sudo make`.
 
 # Once you've built a kernel module
-- Insert with `sudo insmod hello.ko`
+- Insert with `sudo insmod ebbchar.ko`
 - To see if it is loaded use `lsmod`
-- Get some info with `modinfo hello.ko`
-- Remove with `sudo rmmod hello.ko`
+- Get some info with `modinfo ebbchar.ko`
+- Remove with `sudo rmmod ebbchar.ko`
 - Look at kernel log file to see the messages from a kernel module:
   - `sudo su -`
     - Must be a superuser to see these super cool secrets. Logout with `exit`.
