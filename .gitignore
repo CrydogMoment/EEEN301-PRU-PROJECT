@@ -1,0 +1,37 @@
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Linker output (libraries)
+*.ilk
+*.map
+*.exp
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (dynamic libraries)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Debug files
+*.pdb
+*.idb
+
+# Build directories
+build/
+bin/
+obj/
