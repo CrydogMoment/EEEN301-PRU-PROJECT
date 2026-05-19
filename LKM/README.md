@@ -1,3 +1,6 @@
+- Using ISRs in kernel modules: page 729 of The Book
+- Mutex version of ebbchar at https://github.com/derekmolloy/exploringBB/blob/master/extras/kernel/ebbcharmutex/ebbcharmutex.c
+
 # Building
 
 - Make sure the beaglebone has the linux headers installed.
