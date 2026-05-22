@@ -9,6 +9,6 @@ extern void START(void);
 
 void main(void) {
     shared[0] = 1500;   // The number of samples
-    shared[1] = 2;      // Sample delay in ms
+    shared[1] = 20;     // Sample delay in ms
 	START();
 }
