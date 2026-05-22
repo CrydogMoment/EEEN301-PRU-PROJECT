@@ -18,7 +18,18 @@
 
 static char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
 
-int main(){
+int main(int argc, char *argv[]){
+    if (argc != 2) {
+        printf("Sample count argument pwease");
+        return errno;
+    }
+
+    int sample_count = atoi(argv[1]);
+    if (sample_count <= 0 || sample_count > 1500) {
+        printf("Sample count out of range");
+        return errno;
+    }
+
     int ret, fd;
     char stringToSend[BUFFER_LENGTH];
     printf("Starting device...\n");
@@ -27,17 +38,8 @@ int main(){
         perror("Failed to open the device...");
         return errno;
     }
-    printf("Type in a short string to send to the kernel module:\n");
-    scanf("%[^\n]%*c", stringToSend); // Read in a string (with spaces)
-    printf("Writing message to the device [%s].\n", stringToSend);
-    ret = write(fd, stringToSend, strlen(stringToSend)); // Send the string to the LKM
-    if (ret < 0){
-        perror("Failed to write the message to the device.");
-        return errno;
-    }
 
-    printf("Press ENTER to read back from the device...\n");
-    getchar();
+    // TODO in loop, poll periodically, delay
 
     printf("Reading from the device...\n");
     ret = read(fd, receive, BUFFER_LENGTH); // Read the response from the LKM
