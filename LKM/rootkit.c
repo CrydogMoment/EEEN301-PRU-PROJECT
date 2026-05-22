@@ -26,8 +26,8 @@ MODULE_VERSION("0.1");            ///< A version number to inform users
 
 static int    majorNumber;                  ///< Stores the device number -- determined automatically
 // TODO memory for the sensor result array
-static char   message[256] = {0};           ///< Memory for the string that is passed from userspace
-static short  size_of_message;              ///< Used to remember the size of the string stored
+static int   data[1500 * sizeof(int)] = {0};           ///< Memory for the result array
+static short  size_of_data;              ///< Used to remember the size of the stored shit
 static int    numberOpens = 0;              ///< Counts the number of times the device is opened
 static struct class*  ebbcharClass  = NULL; ///< The device-driver class struct pointer
 static struct device* ebbcharDevice = NULL; ///< The device-driver device struct pointer
@@ -124,7 +124,7 @@ static int dev_open(struct inode *inodep, struct file *filep){
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset){
    int error_count = 0;
    // copy_to_user has the format ( * to, *from, size) and returns 0 on success
-   error_count = copy_to_user(buffer, message, size_of_message);
+   error_count = copy_to_user(buffer, data, size_of_data);
 
    // TODO
    // 1. start pru
@@ -134,7 +134,7 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
 
    if (error_count==0){            // if true then have success
       printk(KERN_INFO "EBBChar: Sent %d characters to the user\n", size_of_message);
-      return (size_of_message=0);  // clear the position to the start and return 0
+      return (size_of_data=0);  // clear the position to the start and return 0
    }
    else {
       printk(KERN_INFO "EBBChar: Failed to send %d characters to the user\n", error_count);
@@ -142,7 +142,6 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
    }
 }
 
-// TODO not needed? I think
 /** @brief This function is called whenever the device is being written to from user space i.e.
  *  data is sent to the device from the user. The data is copied to the message[] array in this
  *  LKM using the sprintf() function along with the length of the string.
@@ -152,10 +151,12 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
  *  @param offset The offset if required
  */
 static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset){
+    // TODO write pru configuration
+
    int error_count = 0;
-   error_count = copy_from_user(message, buffer, len);
-   sprintf(message + len, "(%zu letters)", len);   // appending received string with its length
-   size_of_message = strlen(message);                 // store the length of the stored message
+   error_count = copy_from_user(data, buffer, len);
+   sprintf(data + len, "(%zu letters)", len);   // appending received string with its length
+   size_of_data = strlen(data);                 // store the length of the stored message
    printk(KERN_INFO "EBBChar: Received %zu characters from the user\n", len);
    return len;
 }

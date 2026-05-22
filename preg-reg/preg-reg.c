@@ -30,6 +30,8 @@ int main(int argc, char *argv[]){
         return errno;
     }
 
+    // TODO write config with lkm write fn
+
     int ret, fd;
     char stringToSend[BUFFER_LENGTH];
     printf("Starting device...\n");
