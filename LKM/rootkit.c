@@ -16,6 +16,7 @@
 #include <linux/kernel.h>         // Contains types, macros, functions for the kernel
 #include <linux/fs.h>             // Header for the Linux file system support
 #include <linux/uaccess.h>          // Required for the copy to user function
+#include <linux/kmod.h>             //required for running shell scripts
 #define  DEVICE_NAME "rootkit"    ///< The device will appear at /dev/ebbchar using this value
 #define  CLASS_NAME  "ebb"        ///< The device class -- this is a character device driver
 
@@ -85,6 +86,24 @@ static int __init ebbchar_init(void){
       return PTR_ERR(ebbcharDevice);
    }
 
+   char *argv[] = {
+      "bin/bash", "/home/debian/magic-asm/pru/compile_script.sh", NULL
+   };
+   static char *envp[] = {
+      "HOME=/",
+      "TERM=Linux",
+      "PATH = /sbin:/usr/sbin:/bin:/usr/bin",
+      NULL
+   };
+
+   call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+
+   char *argv2[] = {
+      "bin/bash", "/home/debian/magic-asm/pru/upload_firmware.sh", NULL
+   };
+
+   call_usermodehelper(argv2[0], argv2, envp, UMH_WAIT_PROC);
+
    // TODO: compile & upload pru program
 
    printk(KERN_INFO "EBBChar: device class created correctly\n"); // Made it! device was initialized
@@ -122,24 +141,25 @@ static int dev_open(struct inode *inodep, struct file *filep){
  *  @param offset The offset if required
  */
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset){
-   int error_count = 0;
-   // copy_to_user has the format ( * to, *from, size) and returns 0 on success
-   error_count = copy_to_user(buffer, data, size_of_data);
+   // int error_count = 0;
+   // // copy_to_user has the format ( * to, *from, size) and returns 0 on success
+   // error_count = copy_to_user(buffer, data, size_of_data);
 
-   // TODO
-   // 1. start pru
-   // 2. wait until samples are taken
-   // 3. copy to user
-   // 4. stop pru
+   // // TODO
+   // // 1. start pru
+   // // 2. wait until samples are taken
+   // // 3. copy to user
+   // // 4. stop pru
 
-   if (error_count==0){            // if true then have success
-      printk(KERN_INFO "EBBChar: Sent %d characters to the user\n", size_of_message);
-      return (size_of_data=0);  // clear the position to the start and return 0
-   }
-   else {
-      printk(KERN_INFO "EBBChar: Failed to send %d characters to the user\n", error_count);
-      return -EFAULT;              // Failed -- return a bad address message (i.e. -14)
-   }
+   // if (error_count==0){            // if true then have success
+   //    printk(KERN_INFO "EBBChar: Sent %d characters to the user\n", size_of_message);
+   //    return (size_of_data=0);  // clear the position to the start and return 0
+   // }
+   // else {
+   //    printk(KERN_INFO "EBBChar: Failed to send %d characters to the user\n", error_count);
+   //    return -EFAULT;              // Failed -- return a bad address message (i.e. -14)
+   // }
+   return 0;
 }
 
 /** @brief This function is called whenever the device is being written to from user space i.e.
@@ -153,12 +173,13 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
 static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset){
     // TODO write pru configuration
 
-   int error_count = 0;
-   error_count = copy_from_user(data, buffer, len);
-   sprintf(data + len, "(%zu letters)", len);   // appending received string with its length
-   size_of_data = strlen(data);                 // store the length of the stored message
-   printk(KERN_INFO "EBBChar: Received %zu characters from the user\n", len);
-   return len;
+   // int error_count = 0;
+   // error_count = copy_from_user(data, buffer, len);
+   // sprintf(data + len, "(%zu letters)", len);   // appending received string with its length
+   // size_of_data = strlen(data);                 // store the length of the stored message
+   // printk(KERN_INFO "EBBChar: Received %zu characters from the user\n", len);
+   // return len;
+   return 0;
 }
 
 /** @brief The device release function that is called whenever the device is closed/released by
