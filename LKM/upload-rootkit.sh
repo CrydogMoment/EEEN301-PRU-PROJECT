@@ -1,1 +1,1 @@
-sudo rmmod rootkit.ko && sudo make && sudo insmod rootkit.ko
+sudo make && sudo insmod rootkit.ko
