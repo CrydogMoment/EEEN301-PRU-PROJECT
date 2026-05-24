@@ -87,24 +87,27 @@ static int __init ebbchar_init(void){
    }
 
    char *argv[] = {
-      "bin/bash", "/home/debian/magic-asm/pru/compile_script.sh", NULL
+      "/bin/bash", "/home/debian/magic-asm/pru/compile_script.sh", NULL
+   };
+
+   char *argv2[] = {
+      "/bin/bash", "/home/debian/magic-asm/pru/upload_firmware.sh", NULL
    };
    static char *envp[] = {
       "HOME=/",
       "TERM=Linux",
-      "PATH = /sbin:/usr/sbin:/bin:/usr/bin",
+      "PATH=/sbin:/usr/sbin:/bin:/usr/bin",
       NULL
    };
+   int ret;
 
-   call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+   ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+   printk(KERN_INFO "compile_script ret = %d\n", ret);
 
-   char *argv2[] = {
-      "bin/bash", "/home/debian/magic-asm/pru/upload_firmware.sh", NULL
-   };
+   ret = call_usermodehelper(argv2[0], argv2, envp, UMH_WAIT_PROC);
+   printk(KERN_INFO "upload_script ret = %d\n", ret);
 
-   call_usermodehelper(argv2[0], argv2, envp, UMH_WAIT_PROC);
-
-   // TODO: compile & upload pru program
+   // TODO: compile & upload pru program ------------- done?
 
    printk(KERN_INFO "EBBChar: device class created correctly\n"); // Made it! device was initialized
    return 0;
