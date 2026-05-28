@@ -18,6 +18,7 @@
 
 static char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
 void startPRU();
+void uploadRootkit();
 
 int main(int argc, char *argv[]){
     if (argc != 2) {
@@ -33,7 +34,12 @@ int main(int argc, char *argv[]){
 
     // TODO write config with lkm write fn
 
+
+    //uploads the LKM
+    uploadRootkit();
+    //starts the PRU, should most likely be moved to later in initialisation stage.
     startPRU();
+
 
     int ret, fd;
     char stringToSend[BUFFER_LENGTH];
@@ -57,10 +63,25 @@ int main(int argc, char *argv[]){
     return 0;
 }
 
+void uploadRootkit(){
+    char buffer[128];
+    // Change directory to ../LKM/ 
+    FILE *pipe = popen("cd ../LKM && sh remove-rootkit.sh && sh upload-rootkit.sh", "r");
+    
+    if (pipe) {
+        while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+            printf("%s", buffer); // Script already prints its own newlines
+        }
+        pclose(pipe);
+    } else {
+        perror("Failed to launch upload_firmware.sh");
+    }
+}
+
 void startPRU(){
     char buffer[128];
     // Change directory to ../pru/ 
-    FILE *pipe = popen("cd ../pru && sh upload_firmware.sh", "r");
+    FILE *pipe = popen("cd ../pru && sh compile_script.sh && sh upload_firmware.sh", "r");
     
     if (pipe) {
         while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
