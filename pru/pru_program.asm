@@ -33,9 +33,10 @@ COUNTING:
 	QBBS COUNTING, r31, 3          ; loop if the echo is still high
 	; at this point the echo is now low - write the value to shared memory
 	;LDI32 r0, 0x00000008           ; going to write the result to this address
-
-	LSL r0, r1, 2					;shift right twice to multiply by 4
-	ADD r0, r0, 8					; add 8 for constant offset 
+	
+	LDI32 r0, 0
+	LSL r0, r1, 2					;shift left  twice to multiply by 4
+	ADD r0, r0, 4					; add 8 for constant offset 
 	
 	SBBO &r3, r0, 0, 4             ; store the count at this address
 	; one more sample iteration has taken place
