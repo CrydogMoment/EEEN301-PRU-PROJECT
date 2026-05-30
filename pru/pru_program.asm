@@ -3,7 +3,7 @@
 	.global START
 	.asg 32, PRU0_R31_VEC_VALID 		; allows notification of program completion
 	.asg 3, PRU_EVTOUT_0 			; the event number that is sent back
-	.asg 1000, TRIGGER_COUNT ;
+	.asg 2000, TRIGGER_COUNT ;
 	.asg 100000, SAMPLE_DELAY_1MS
 
 ; Using register 0 for all temporary storage (reused multiple times)
