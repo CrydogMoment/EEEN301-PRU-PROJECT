@@ -25,6 +25,10 @@ TRIGGERING:                        ; delay for 10us
 	CLR r30, r30.t5                ; 10us over, set the triger low - pulse sent
 	; clear the counter and wait until the echo goes high
 	LDI32 r3, 0 				   ; r3 will store the echo pulse width
+
+WAIT_LOW:							;wait until trigger goes LO, then HI. 
+    QBBS WAIT_LOW, r31, 3
+
 	WBS r31, 3                     ; wait until the echo goes high
 	; start counting (measuring echo pulse width) until the echo goes low
 
