@@ -17,6 +17,9 @@
 #include <linux/fs.h>             // Header for the Linux file system support
 #include <linux/uaccess.h>          // Required for the copy to user function
 #include <linux/kmod.h>             //required for running shell scripts
+
+#include <linux/io.h>               //required for writing to RAM
+
 #define  DEVICE_NAME "rootkit"    ///< The device will appear at /dev/ebbchar using this value
 #define  CLASS_NAME  "ebb"        ///< The device class -- this is a character device driver
 
@@ -39,6 +42,12 @@ static int     dev_release(struct inode *, struct file *);
 static ssize_t dev_read(struct file *, char *, size_t, loff_t *);
 static ssize_t dev_write(struct file *, const char *, size_t, loff_t *);
 
+//added for writing to shared RAN
+#define PRUSS_SHARED_RAM_PADDR 0x4A300000
+#define PRUSS_SHARED_RAM_SIZE  0x3000 // 12 KB
+
+void __iomem *shared_ram_vaddr; 
+
 /** @brief Devices are represented as file structure in the kernel. The file_operations structure from
  *  /linux/fs.h lists the callback functions that you wish to associated with your file operations
  *  using a C99 syntax structure. char devices usually implement open, read, write and release calls
@@ -58,15 +67,15 @@ static struct file_operations fops =
  *  @return returns 0 if successful
  */
 static int __init ebbchar_init(void){
-   printk(KERN_INFO "EBBChar: Initializing the EBBChar LKM\n");
+   printk(KERN_INFO "rootkit: Initializing the rootkit LKM\n");
 
    // Try to dynamically allocate a major number for the device -- more difficult but worth it
    majorNumber = register_chrdev(0, DEVICE_NAME, &fops);
    if (majorNumber<0){
-      printk(KERN_ALERT "EBBChar failed to register a major number\n");
+      printk(KERN_ALERT "rootkit failed to register a major number\n");
       return majorNumber;
    }
-   printk(KERN_INFO "EBBChar: registered correctly with major number %d\n", majorNumber);
+   printk(KERN_INFO "rootkit: registered correctly with major number %d\n", majorNumber);
 
    // Register the device class
    ebbcharClass = class_create(THIS_MODULE, CLASS_NAME);
@@ -75,7 +84,7 @@ static int __init ebbchar_init(void){
       printk(KERN_ALERT "Failed to register device class\n");
       return PTR_ERR(ebbcharClass);          // Correct way to return an error on a pointer
    }
-   printk(KERN_INFO "EBBChar: device class registered correctly\n");
+   printk(KERN_INFO "rootkit: device class registered correctly\n");
 
    // Register the device driver
    ebbcharDevice = device_create(ebbcharClass, NULL, MKDEV(majorNumber, 0), NULL, DEVICE_NAME);
@@ -86,27 +95,17 @@ static int __init ebbchar_init(void){
       return PTR_ERR(ebbcharDevice);
    }
 
-   char *argv[] = {
-      "bin/bash", "/home/debian/magic-asm/pru/compile_script.sh", NULL
-   };
-   static char *envp[] = {
-      "HOME=/",
-      "TERM=Linux",
-      "PATH = /sbin:/usr/sbin:/bin:/usr/bin",
-      NULL
-   };
+   // Map physical address to kernel virtual address
+   shared_ram_vaddr = ioremap(PRUSS_SHARED_RAM_PADDR, PRUSS_SHARED_RAM_SIZE);
+    
+   if (!shared_ram_vaddr) {
+      printk(KERN_ERR "Failed to map shared RAM\n");
+      return -ENOMEM;
+   }
 
-   call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+   // TODO: compile & upload pru program ------------- done?
 
-   char *argv2[] = {
-      "bin/bash", "/home/debian/magic-asm/pru/upload_firmware.sh", NULL
-   };
-
-   call_usermodehelper(argv2[0], argv2, envp, UMH_WAIT_PROC);
-
-   // TODO: compile & upload pru program
-
-   printk(KERN_INFO "EBBChar: device class created correctly\n"); // Made it! device was initialized
+   printk(KERN_INFO "rootkit: device class created correctly\n"); // Made it! device was initialized
    return 0;
 }
 
@@ -115,11 +114,15 @@ static int __init ebbchar_init(void){
  *  code is used for a built-in driver (not a LKM) that this function is not required.
  */
 static void __exit ebbchar_exit(void){
+   if (shared_ram_vaddr) {
+      iounmap(shared_ram_vaddr);
+   }
+
    device_destroy(ebbcharClass, MKDEV(majorNumber, 0));     // remove the device
    class_unregister(ebbcharClass);                          // unregister the device class
    class_destroy(ebbcharClass);                             // remove the device class
    unregister_chrdev(majorNumber, DEVICE_NAME);             // unregister the major number
-   printk(KERN_INFO "EBBChar: Goodbye from the LKM!\n");
+   printk(KERN_INFO "rootkit: Goodbye from the LKM!\n");
 }
 
 /** @brief The device open function that is called each time the device is opened
@@ -128,7 +131,7 @@ static void __exit ebbchar_exit(void){
  */
 static int dev_open(struct inode *inodep, struct file *filep){
    numberOpens++;
-   printk(KERN_INFO "EBBChar: Device has been opened %d time(s)\n", numberOpens);
+   printk(KERN_INFO "rootkit: Device has been opened %d time(s)\n", numberOpens);
    return 0;
 }
 
@@ -137,30 +140,38 @@ static int dev_open(struct inode *inodep, struct file *filep){
  *  send the buffer string to the user and captures any errors.
  *  @param filep A pointer to a file object (defined in linux/fs.h)
  *  @param buffer The pointer to the buffer to which this function writes the data
- *  @param len The length of the b
+ *  @param len The length of the samples array
  *  @param offset The offset if required
  */
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset){
-   // int error_count = 0;
-   // // copy_to_user has the format ( * to, *from, size) and returns 0 on success
-   // error_count = copy_to_user(buffer, data, size_of_data);
+   int error_count = 0;
 
-   // // TODO
-   // // 1. start pru
-   // // 2. wait until samples are taken
-   // // 3. copy to user
-   // // 4. stop pru
+   //phys_addr_t phy_addr = PRUSS_SHARED_RAM_PADDR + (len * 4) + 8; //BASE REGISTER ADDRESS
 
-   // if (error_count==0){            // if true then have success
-   //    printk(KERN_INFO "EBBChar: Sent %d characters to the user\n", size_of_message);
-   //    return (size_of_data=0);  // clear the position to the start and return 0
-   // }
-   // else {
-   //    printk(KERN_INFO "EBBChar: Failed to send %d characters to the user\n", error_count);
-   //    return -EFAULT;              // Failed -- return a bad address message (i.e. -14)
-   // }
-   return 0;
+   //void *vir_addr = ioremap(phy_addr, PRUSS_SHARED_RAM_SIZE);
+
+   u32 vals[len];
+   int i = 0;
+   while (i < len) {
+      vals[i] = readl(shared_ram_vaddr + (i * 4) + 8);
+      i ++;
+   }
+   
+   //size_t message_len = strlen(val) + 1; // +1 for  null terminator
+   // copy_to_user( *to, *from, size) -> returns 0 on success
+   error_count = copy_to_user(buffer, vals, len*4);
+
+   if (error_count == 0){
+      printk(KERN_INFO "rootkit: Sent test message to the user\n");
+      return len + 1; // Return bytes read so the user space program knows data arrived
+   }
+   else {
+      printk(KERN_ALERT "rootkit: Failed to send characters to the user\n");
+      return -EFAULT; 
+   }
 }
+
+
 
 /** @brief This function is called whenever the device is being written to from user space i.e.
  *  data is sent to the device from the user. The data is copied to the message[] array in this
@@ -170,16 +181,44 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
  *  @param len The length of the array of data that is being passed in the const char buffer
  *  @param offset The offset if required
  */
-static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset){
-    // TODO write pru configuration
+static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset) {
+    char kbuf[16]; // Temporary buffer to hold the input string
+    int user_value;
+    int error_count;
 
-   // int error_count = 0;
-   // error_count = copy_from_user(data, buffer, len);
-   // sprintf(data + len, "(%zu letters)", len);   // appending received string with its length
-   // size_of_data = strlen(data);                 // store the length of the stored message
-   // printk(KERN_INFO "EBBChar: Received %zu characters from the user\n", len);
-   // return len;
-   return 0;
+    // prevent buffer overflows
+    if (len > sizeof(kbuf) - 1) {
+        printk(KERN_ALERT "rootkit: Input too long\n");
+        return -EINVAL;
+    }
+
+    // copy data from user space to kernel space
+    error_count = copy_from_user(kbuf, buffer, len);
+    if (error_count != 0) {
+        printk(KERN_ALERT "rootkit: Failed to copy data from user\n");
+        return -EFAULT;
+    }
+
+    //  null-terminate the string so parsing functions work safely
+    kbuf[len] = '\0';
+
+    //    Convert the ASCII string into an actual integer
+    //    kstrtoint handles white spaces and returns 0 on success
+    if (kstrtoint(kbuf, 10, &user_value) != 0) {
+        printk(KERN_ALERT "rootkit: Invalid integer string received\n");
+        return -EINVAL;
+    }
+
+    // write the actual integer value to the PRU Shared RAM
+    if (shared_ram_vaddr) {
+        writel(user_value, shared_ram_vaddr);
+        printk(KERN_INFO "rootkit: Wrote integer %d to Shared RAM address: %pa\n", user_value, shared_ram_vaddr);
+    } else {
+        printk(KERN_ALERT "rootkit: Shared RAM pointer is NULL\n");
+        return -EIO;
+    }
+
+    return len; // Return the number of bytes handled
 }
 
 /** @brief The device release function that is called whenever the device is closed/released by
@@ -188,7 +227,7 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
  *  @param filep A pointer to a file object (defined in linux/fs.h)
  */
 static int dev_release(struct inode *inodep, struct file *filep){
-   printk(KERN_INFO "EBBChar: Device successfully closed\n");
+   printk(KERN_INFO "rootkit: Device successfully closed\n");
    return 0;
 }
 

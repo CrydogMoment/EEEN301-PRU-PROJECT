@@ -3,7 +3,7 @@
 	.global START
 	.asg 32, PRU0_R31_VEC_VALID 		; allows notification of program completion
 	.asg 3, PRU_EVTOUT_0 			; the event number that is sent back
-	.asg 1000, TRIGGER_COUNT ;
+	.asg 2000, TRIGGER_COUNT ;
 	.asg 100000, SAMPLE_DELAY_1MS
 
 ; Using register 0 for all temporary storage (reused multiple times)
@@ -25,6 +25,10 @@ TRIGGERING:                        ; delay for 10us
 	CLR r30, r30.t5                ; 10us over, set the triger low - pulse sent
 	; clear the counter and wait until the echo goes high
 	LDI32 r3, 0 				   ; r3 will store the echo pulse width
+
+WAIT_LOW:							;wait until trigger goes LO, then HI. 
+    QBBS WAIT_LOW, r31, 3
+
 	WBS r31, 3                     ; wait until the echo goes high
 	; start counting (measuring echo pulse width) until the echo goes low
 
@@ -33,9 +37,10 @@ COUNTING:
 	QBBS COUNTING, r31, 3          ; loop if the echo is still high
 	; at this point the echo is now low - write the value to shared memory
 	;LDI32 r0, 0x00000008           ; going to write the result to this address
-
-	LSL r0, r1, 2					;shift right twice to multiply by 4
-	ADD r0, r0, 8					; add 8 for constant offset 
+	
+	LDI32 r0, 0
+	LSL r0, r1, 2					;shift left  twice to multiply by 4
+	ADD r0, r0, 4					; add 8 for constant offset 
 	
 	SBBO &r3, r0, 0, 4             ; store the count at this address
 	; one more sample iteration has taken place
