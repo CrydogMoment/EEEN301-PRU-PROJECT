@@ -22,8 +22,8 @@
 #include <linux/platform_device.h>
 #include <linux/uio_driver.h>
 #include <linux/gpio.h>
-#include <linux/timekeeping.h>
-#include <linux/types.h>
+#include <linux/semaphore.h>
+#include <linux/delay.h>
 
 #define PRUSS_UIO_DEVNAME "pruss_uio"
 
@@ -42,7 +42,7 @@ static struct device* ebbcharDevice = NULL; // The device-driver device struct p
 static unsigned int gpio_interrupt = 48;     // P9_15 pin that goes low at the end of PRU program
 static unsigned int irq_number;              // share IRQ num within file
 
-static int data_ready = 0;
+static DEFINE_SEMAPHORE(data_ready_sem);
 
 // Prototype functions for the character driver -- must come before the struct definition
 static int     dev_open(struct inode *, struct file *);
@@ -131,10 +131,8 @@ static int __init ebbchar_init(void){
 
 static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs) {
     printk(KERN_INFO "rootkit: PRU Interrupt Picked up by LKM!\n");
-    printk(KERN_INFO "rootkit: Waking up sleepy process...\n");
-    data_ready = 1;
 
-    // Add bottom-half handling, tasklet, or wake up a wait_queue here
+    up(&data_ready_sem);
 
     return (irq_handler_t) IRQ_HANDLED;
 }
@@ -174,18 +172,11 @@ static int dev_open(struct inode *inodep, struct file *filep){
  *  @param len The length of the samples array
  *  @param offset The offset if required
  */
-static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset){
-    printk(KERN_INFO "rootkit: Eeping until interrupt comes through...\n");
-
-    time64_t start = ktime_get_real_seconds();
-    while (data_ready == 0) {
-        if (ktime_get_real_seconds() - start > 15) {
-            printk(KERN_ALERT "rootkit: Timed out\n");
-            return -EFAULT;
-        }
+static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset) {
+    if (down_interruptible(&data_ready_sem)) {
+        pr_alert("rootkit: Semaphore acquisition interrupted!\n");
+        return -ERESTARTSYS;
     }
-
-    printk(KERN_DEBUG "rootkit: has awoken");
 
     int error_count = 0;
 
