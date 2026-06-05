@@ -6,6 +6,7 @@
 	.asg 2000, TRIGGER_COUNT ;
 	.asg 100000, SAMPLE_DELAY_1MS
 	.asg 50, DEBOUNCE
+	.asg 2508, MULTI_CONST
 
 ; Using register 0 for all temporary storage (reused multiple times)
 START:
@@ -43,15 +44,37 @@ COUNTING:
 
 COUNT_DEBOUNCE:
 	SUB r9, r9, 1
+	ADD r3, r3, 1                  ; increment the counter by 1
 	QBBS COUNTING, r31, 3
 	QBNE COUNT_DEBOUNCE, r9, 0
 
 	; at this point the echo is now low - write the value to shared memory
 	;LDI32 r0, 0x00000008           ; going to write the result to this address
 	
+
+
+	LDI r9, MULTI_CONST 	; set up multiplication registers
+	LDI r8, 0		;bit logic register
+	LDI r7, 0		;where output will go
+MULTI_LOOP:
+	QBEQ DONE_MULTI, r3, 0
+	AND r8, r3, 1
+	QBEQ SKIP_ADD, r8, 0
+	ADD r7, r7, r9
+SKIP_ADD:
+	LSR r3,r3,1
+	LSL r9,r9,1
+	QBA MULTI_LOOP
+DONE_MULTI:
+
+	LDI r3, 0
+	ADD r3, r3, r7
+
 	LDI32 r0, 0
 	LSL r0, r1, 2					;shift left  twice to multiply by 4
 	ADD r0, r0, 4					; add 8 for constant offset 
+
+
 	
 	SBBO &r3, r0, 0, 4             ; store the count at this address
 	; one more sample iteration has taken place
