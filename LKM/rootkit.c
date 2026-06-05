@@ -81,7 +81,7 @@ static int __init ebbchar_init(void){
    // Try to dynamically allocate a major number for the device -- more difficult but worth it
    majorNumber = register_chrdev(0, DEVICE_NAME, &fops);
    if (majorNumber<0){
-      printk(KERN_ALERT "rootkit failed to register a major number\n");
+      printk(KERN_ERR "rootkit: failed to register a major number\n");
       return majorNumber;
    }
    printk(KERN_INFO "rootkit: registered correctly with major number %d\n", majorNumber);
@@ -90,7 +90,7 @@ static int __init ebbchar_init(void){
    ebbcharClass = class_create(THIS_MODULE, CLASS_NAME);
    if (IS_ERR(ebbcharClass)){                // Check for error and clean up if there is
       unregister_chrdev(majorNumber, DEVICE_NAME);
-      printk(KERN_ALERT "Failed to register device class\n");
+      printk(KERN_ERR "rootkit: Failed to register device class\n");
       return PTR_ERR(ebbcharClass);          // Correct way to return an error on a pointer
    }
    printk(KERN_INFO "rootkit: device class registered correctly\n");
@@ -100,7 +100,7 @@ static int __init ebbchar_init(void){
    if (IS_ERR(ebbcharDevice)){               // Clean up if there is an error
       class_destroy(ebbcharClass);           // Repeated code but the alternative is goto statements
       unregister_chrdev(majorNumber, DEVICE_NAME);
-      printk(KERN_ALERT "Failed to create the device\n");
+      printk(KERN_ERR "rootkit: Failed to create the device\n");
       return PTR_ERR(ebbcharDevice);
    }
 
