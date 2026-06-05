@@ -7,15 +7,13 @@
 	.asg 100000, SAMPLE_DELAY_1MS
 	.asg 50, DEBOUNCE
 
-; Using register 0 for all temporary storage (reused multiple times)
+; Using register 0 for temporary storage
 START:
-	SET r30, r30.t7
-	; Read number of samples to read and inter-sample delay
-	LDI32 r0, 0x00000000           ; load the memory location, number of samples
-	LBBO &r1, r0, 0, 4 		       ; load the value into memory - keep r1
-	; Read the sample delay
-	LDI32 r0, 0x00000004           ; the sample delay is in the second 32-bits
-	LBBO &r2, r0, 0, 4             ; the sample delay is stored in r2
+	SET r30, r30.t7                ; set pru output gpio for whole program
+	LDI32 r0, 0x00000000           ; Load the number of samples
+	LBBO &r1, r0, 0, 4
+	LDI32 r0, 0x00000004           ; Load the sample delay
+	LBBO &r2, r0, 0, 4
 
 MAINLOOP:
 	LDI32 r0, TRIGGER_COUNT        ; store length of the trigger pulse delay
@@ -24,39 +22,32 @@ MAINLOOP:
 TRIGGERING:                        ; delay for 10us
 	SUB r0, r0, 1                  ; decrement loop counter
 	QBNE TRIGGERING, r0, 0         ; repeat loop unless zero
-	CLR r30, r30.t5                ; 10us over, set the triger low - pulse sent
+	CLR r30, r30.t5                ; 10us over, set trigger low
 	; clear the counter and wait until the echo goes high
 	LDI32 r3, 0 				   ; r3 will store the echo pulse width
-
-WAIT_LOW:							;wait until trigger goes LO, then HI. 
-    	QBBC WAIT_LOW, r31, 3
-	QBA COUNTING
-
-	;WBS r31, 3                     ; wait until the echo goes high
-	; start counting (measuring echo pulse width) until the echo goes low
-
+    WBS r31, 3                     ; wait until the echo goes high
 
 COUNTING:
-	LDI r9, DEBOUNCE
-	ADD r3, r3, 1                  ; increment the counter by 1
+	LDI r9, DEBOUNCE               ; reset debounce counter
+	ADD r3, r3, 1                  ; increment the echo counter by 1
 	QBBS COUNTING, r31, 3          ; loop if the echo is still high
 
+; "debounce", make sure we only count the echo as finished if it stays low
 COUNT_DEBOUNCE:
-	SUB r9, r9, 1
-	QBBS COUNTING, r31, 3
-	QBNE COUNT_DEBOUNCE, r9, 0
+	SUB r9, r9, 1                  ; debounce countdown
+	ADD r3, r3, 1                  ; still increase echo counter in debounce mode
+	QBBS COUNTING, r31, 3          ; go back to normal counting if echo is high again
+	QBNE COUNT_DEBOUNCE, r9, 0     ; continue loop until debounce is over
 
-	; at this point the echo is now low - write the value to shared memory
-	;LDI32 r0, 0x00000008           ; going to write the result to this address
-	
+	; Write the value to shared memory
 	LDI32 r0, 0
-	LSL r0, r1, 2					;shift left  twice to multiply by 4
-	ADD r0, r0, 4					; add 8 for constant offset 
-	
-	SBBO &r3, r0, 0, 4             ; store the count at this address
+	LSL r0, r1, 2                  ; multiply iteration by 4 for array pos
+	ADD r0, r0, 4                  ; constant offset (don't overwrite trigger count & sample delay)
+	SBBO &r3, r0, 0, 4             ; store echo count at this address
+
 	; one more sample iteration has taken place
 	SUB r1, r1, 1                  ; take 1 away from the number of iterations
-	MOV r0, r2                     ; need a delay between samples
+	MOV r0, r2                     ; load delay between samples
 
 SAMPLEDELAY: 				       ; do this loop r2 times (1ms delay each time)
 	SUB r0, r0, 1                  ; decrement counter by 1
@@ -66,9 +57,8 @@ DELAY1MS:
 	SUB r4, r4, 1
 	QBNE DELAY1MS, r4, 0 			; keep going until 1ms has elapsed
 	QBNE SAMPLEDELAY, r0, 0 		; repeat loop unless zero
-	QBNE MAINLOOP, r1, 0            ; loop if the no of iterations has not passed
+	QBNE MAINLOOP, r1, 0            ; loop if the number of iterations has not passed
 
-END:                                ; end of program, send back interrupt
-	CLR r30, r30.t7
-	LDI32 R31, (PRU0_R31_VEC_VALID|PRU_EVTOUT_0)
+END:
+    CLR r30, r30.t7                 ; clear pru output pin, use this as a GPIO interrupt
 	HALT                            ; halt the pru program
