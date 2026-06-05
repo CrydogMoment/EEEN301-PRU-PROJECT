@@ -37,7 +37,7 @@ static int majorNumber;                     // Stores the device number -- deter
 static int numberOpens = 0;                 // Counts the number of times the device is opened
 static struct class*  ebbcharClass  = NULL; // The device-driver class struct pointer
 static struct device* ebbcharDevice = NULL; // The device-driver device struct pointer
-static unsigned int gpio_interrupt = 15;     // pin that goes low at the end of PRU program
+static unsigned int gpio_interrupt = 48;     // P9_15 pin that goes low at the end of PRU program
 static unsigned int irq_number;              // share IRQ num within file
 
 // Prototype functions for the character driver -- must come before the struct definition
@@ -126,7 +126,7 @@ static int __init ebbchar_init(void){
 }
 
 static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs) {
-    printk(KERN_INFO "PRU Interrupt Picked up by LKM!\n");
+    printk(KERN_INFO "rootkit: PRU Interrupt Picked up by LKM!\n");
 
     // Add bottom-half handling, tasklet, or wake up a wait_queue here
 
