@@ -10,52 +10,49 @@
  * @see http://www.derekmolloy.ie/ for a full description and follow-up descriptions.
  */
 
-#include <linux/init.h>           // Macros used to mark up functions e.g. __init __exit
-#include <linux/module.h>         // Core header for loading LKMs into the kernel
-#include <linux/device.h>         // Header to support the kernel Driver Model
-#include <linux/kernel.h>         // Contains types, macros, functions for the kernel
-#include <linux/fs.h>             // Header for the Linux file system support
+#include <linux/init.h>             // Macros used to mark up functions e.g. __init __exit
+#include <linux/module.h>           // Core header for loading LKMs into the kernel
+#include <linux/device.h>           // Header to support the kernel Driver Model
+#include <linux/kernel.h>           // Contains types, macros, functions for the kernel
+#include <linux/fs.h>               // Header for the Linux file system support
 #include <linux/uaccess.h>          // Required for the copy to user function
 #include <linux/kmod.h>             //required for running shell scripts
-
 #include <linux/io.h>               //required for writing to RAM
-
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/uio_driver.h>
 #include <linux/gpio.h>
 
-#define PRUSS_UIO_DEVNAME "pruss_uio" 
+#define PRUSS_UIO_DEVNAME "pruss_uio"
 
-#define  DEVICE_NAME "rootkit"    ///< The device will appear at /dev/ebbchar using this value
-#define  CLASS_NAME  "ebb"        ///< The device class -- this is a character device driver
+#define  DEVICE_NAME "rootkit"      ///< The device will appear at /dev/ebbchar using this value
+#define  CLASS_NAME  "ebb"          ///< The device class -- this is a character device driver
 
-MODULE_LICENSE("GPL");            ///< The license type -- this affects available functionality
-MODULE_AUTHOR("Riley&Zuni");    ///< The author -- visible when you use modinfo
-MODULE_DESCRIPTION("A simple Linux char driver for the BBB");  ///< The description -- see modinfo
-MODULE_VERSION("0.1");            ///< A version number to inform users
+MODULE_LICENSE("GPL");              ///< The license type -- this affects available functionality
+MODULE_AUTHOR("Riley&Zuni");        ///< The author -- visible when you use modinfo
+MODULE_DESCRIPTION("A simple Linux char driver for the BBB");
+MODULE_VERSION("0.1");              ///< A version number to inform users
 
-static int    majorNumber;                  ///< Stores the device number -- determined automatically
-// TODO memory for the sensor result array
-static int   data[1500 * sizeof(int)] = {0};           ///< Memory for the result array
-static short  size_of_data;              ///< Used to remember the size of the stored shit
-static int    numberOpens = 0;              ///< Counts the number of times the device is opened
-static struct class*  ebbcharClass  = NULL; ///< The device-driver class struct pointer
-static struct device* ebbcharDevice = NULL; ///< The device-driver device struct pointer
+static int majorNumber;                     // Stores the device number -- determined automatically
+static int data[1500 * sizeof(int)] = {0};  // Memory for the result array
+static short size_of_data;                  // Used to remember the size of the stored shit
+static int numberOpens = 0;                 // Counts the number of times the device is opened
+static struct class*  ebbcharClass  = NULL; // The device-driver class struct pointer
+static struct device* ebbcharDevice = NULL; // The device-driver device struct pointer
+static unsigned int gpioInterrupt = 15;     // pin that goes low at the end of PRU program
+static unsigned int irqNumber;              // share IRQ num within file
 
-static int pru_irq; //used for interrupt, this should be 17 we think?? 
-
-// The prototype functions for the character driver -- must come before the struct definition
+// Prototype functions for the character driver -- must come before the struct definition
 static int     dev_open(struct inode *, struct file *);
 static int     dev_release(struct inode *, struct file *);
 static ssize_t dev_read(struct file *, char *, size_t, loff_t *);
 static ssize_t dev_write(struct file *, const char *, size_t, loff_t *);
 
-//added for writing to shared RAN
+//added for writing to shared RAM
 #define PRUSS_SHARED_RAM_PADDR 0x4A300000
 #define PRUSS_SHARED_RAM_SIZE  0x3000 // 12 KB
 
-void __iomem *shared_ram_vaddr; 
+void __iomem *shared_ram_vaddr;
 
 /** @brief Devices are represented as file structure in the kernel. The file_operations structure from
  *  /linux/fs.h lists the callback functions that you wish to associated with your file operations
@@ -69,13 +66,8 @@ static struct file_operations fops =
    .release = dev_release,
 };
 
-static irq_handler_t pru_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs) {
-    printk(KERN_INFO "PRU Interrupt Picked up by LKM!\n");
-    
-    // Add bottom-half handling, tasklet, or wake up a wait_queue here
-    
-    return (irq_handler_t) IRQ_HANDLED;
-}
+// prototype for the custom IRQ handler function, function below
+static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs);
 
 /** @brief The LKM initialization function
  *  The static keyword restricts the visibility of the function to within this C file. The __init
@@ -114,7 +106,7 @@ static int __init ebbchar_init(void){
 
    // Map physical address to kernel virtual address
    shared_ram_vaddr = ioremap(PRUSS_SHARED_RAM_PADDR, PRUSS_SHARED_RAM_SIZE);
-    
+
    if (!shared_ram_vaddr) {
       printk(KERN_ERR "rootkit: Failed to map shared RAM\n");
       return -ENOMEM;
@@ -124,24 +116,27 @@ static int __init ebbchar_init(void){
    pru_irq = gpio_to_irq(17);
    printk(KERN_INFO "rootkit: irq: %d\n", pru_irq);
 
+   printk(KERN_INFO "rootkit: button value is currently: %d\n",
+   gpio_get_value(gpioInterrupt));
+   irqNumber = gpio_to_irq(gpioInterrupt); // map GPIO to IRQ number
+   printk(KERN_INFO "rootkit: button mapped to IRQ: %d\n", irqNumber);
 
-   //request IRQ and set up interrupt handler? 
-   int ret;
-   
-    
-   // Request the IRQ and register the handler
-   ret = request_irq(pru_irq, 
-      (irq_handler_t) pru_irq_handler, 
-      IRQF_TRIGGER_RISING, 
-      "pru_irq_handler", 
-      NULL);
-   if (ret) {
-      printk(KERN_ERR "rootkit: failed to request IRQ %d\n", pru_irq);
-      return ret;
-   }
+   // This next call requests an interrupt line
+   result = request_irq(irqNumber,                  // interrupt number requested
+            (irq_handler_t) ebb_gpio_irq_handler,   // handler function
+            IRQF_TRIGGER_RISING,                    // on rising edge (press, not release)
+            "ebb_gpio_handler",                     // used in /proc/interrupts
+            NULL);                                  // *dev_id for shared interrupt lines
+   printk(KERN_INFO "rootkit: IRQ request result is: %d\n", result);
+   return result;
+}
 
-   printk(KERN_INFO "rootkit: device class created correctly\n"); // Made it! device was initialized
-   return 0;
+static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs) {
+    printk(KERN_INFO "PRU Interrupt Picked up by LKM!\n");
+
+    // Add bottom-half handling, tasklet, or wake up a wait_queue here
+
+    return (irq_handler_t) IRQ_HANDLED;
 }
 
 /** @brief The LKM cleanup function
@@ -153,7 +148,7 @@ static void __exit ebbchar_exit(void){
       iounmap(shared_ram_vaddr);
    }
 
-   free_irq(pru_irq, NULL);
+   free_irq(irqNumber, NULL);
    device_destroy(ebbcharClass, MKDEV(majorNumber, 0));     // remove the device
    class_unregister(ebbcharClass);                          // unregister the device class
    class_destroy(ebbcharClass);                             // remove the device class
@@ -192,7 +187,7 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
       vals[i] = readl(shared_ram_vaddr + (i * 4) + 8);
       i ++;
    }
-   
+
    //size_t message_len = strlen(val) + 1; // +1 for  null terminator
    // copy_to_user( *to, *from, size) -> returns 0 on success
    error_count = copy_to_user(buffer, vals, len*4);
@@ -203,7 +198,7 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
    }
    else {
       printk(KERN_ALERT "rootkit: Failed to send characters to the user\n");
-      return -EFAULT; 
+      return -EFAULT;
    }
 }
 
