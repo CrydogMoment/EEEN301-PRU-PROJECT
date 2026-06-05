@@ -22,6 +22,8 @@
 #include <linux/platform_device.h>
 #include <linux/uio_driver.h>
 #include <linux/gpio.h>
+#include <linux/wait.h>
+#include <linux/sched.h>
 
 #define PRUSS_UIO_DEVNAME "pruss_uio"
 
@@ -39,6 +41,8 @@ static struct class*  ebbcharClass  = NULL; // The device-driver class struct po
 static struct device* ebbcharDevice = NULL; // The device-driver device struct pointer
 static unsigned int gpio_interrupt = 48;     // P9_15 pin that goes low at the end of PRU program
 static unsigned int irq_number;              // share IRQ num within file
+
+static DECLARE_WAIT_QUEUE_HEAD(wq);
 
 // Prototype functions for the character driver -- must come before the struct definition
 static int     dev_open(struct inode *, struct file *);
@@ -127,6 +131,8 @@ static int __init ebbchar_init(void){
 
 static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs) {
     printk(KERN_INFO "rootkit: PRU Interrupt Picked up by LKM!\n");
+    printk(KERN_INFO "rootkit: Waking up sleepy process...\n");
+    wake_up_interruptible(&wq);
 
     // Add bottom-half handling, tasklet, or wake up a wait_queue here
 
@@ -169,31 +175,27 @@ static int dev_open(struct inode *inodep, struct file *filep){
  *  @param offset The offset if required
  */
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset){
-   int error_count = 0;
+    printk(KERN_INFO "rootkit: Eeping until interrupt comes through...\n");
+    interruptible_sleep_on(&wq);
+    printk(KERN_DEBUG "rootkit: has awoken");
 
-   //phys_addr_t phy_addr = PRUSS_SHARED_RAM_PADDR + (len * 4) + 8; //BASE REGISTER ADDRESS
+    int error_count = 0;
 
-   //void *vir_addr = ioremap(phy_addr, PRUSS_SHARED_RAM_SIZE);
+    u32 vals[len];
+    int i = 0;
+    while (i < len) {
+        vals[i] = readl(shared_ram_vaddr + (i * 4) + 8);
+        i ++;
+    }
+    error_count = copy_to_user(buffer, vals, len*4);
 
-   u32 vals[len];
-   int i = 0;
-   while (i < len) {
-      vals[i] = readl(shared_ram_vaddr + (i * 4) + 8);
-      i ++;
-   }
-
-   //size_t message_len = strlen(val) + 1; // +1 for  null terminator
-   // copy_to_user( *to, *from, size) -> returns 0 on success
-   error_count = copy_to_user(buffer, vals, len*4);
-
-   if (error_count == 0){
-      printk(KERN_INFO "rootkit: Sent test message to the user\n");
-      return len + 1; // Return bytes read so the user space program knows data arrived
-   }
-   else {
-      printk(KERN_ALERT "rootkit: Failed to send characters to the user\n");
-      return -EFAULT;
-   }
+    if (error_count == 0) {
+        printk(KERN_INFO "rootkit: Sent test message to the user\n");
+        return len + 1; // Return bytes read so the user space program knows data arrived
+    } else {
+        printk(KERN_ALERT "rootkit: Failed to send characters to the user\n");
+        return -EFAULT;
+    }
 }
 
 /** @brief This function is called whenever the device is being written to from user space i.e.
