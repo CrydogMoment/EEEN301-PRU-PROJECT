@@ -22,8 +22,6 @@
 #include <linux/platform_device.h>
 #include <linux/uio_driver.h>
 #include <linux/gpio.h>
-#include <linux/wait.h>
-#include <linux/sched.h>
 
 #define PRUSS_UIO_DEVNAME "pruss_uio"
 
@@ -42,7 +40,6 @@ static struct device* ebbcharDevice = NULL; // The device-driver device struct p
 static unsigned int gpio_interrupt = 48;     // P9_15 pin that goes low at the end of PRU program
 static unsigned int irq_number;              // share IRQ num within file
 
-DECLARE_WAIT_QUEUE_HEAD(wq);
 static int data_ready = 0;
 
 // Prototype functions for the character driver -- must come before the struct definition
@@ -177,7 +174,9 @@ static int dev_open(struct inode *inodep, struct file *filep){
  */
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset){
     printk(KERN_INFO "rootkit: Eeping until interrupt comes through...\n");
-    wait_event_interruptible(&wq, data_ready);
+
+    while (data_ready == 0) {}
+
     printk(KERN_DEBUG "rootkit: has awoken");
 
     int error_count = 0;
