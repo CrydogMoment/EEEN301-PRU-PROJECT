@@ -34,13 +34,11 @@ MODULE_DESCRIPTION("A simple Linux char driver for the BBB");
 MODULE_VERSION("0.1");              ///< A version number to inform users
 
 static int majorNumber;                     // Stores the device number -- determined automatically
-static int data[1500 * sizeof(int)] = {0};  // Memory for the result array
-static short size_of_data;                  // Used to remember the size of the stored shit
 static int numberOpens = 0;                 // Counts the number of times the device is opened
 static struct class*  ebbcharClass  = NULL; // The device-driver class struct pointer
 static struct device* ebbcharDevice = NULL; // The device-driver device struct pointer
-static unsigned int gpioInterrupt = 15;     // pin that goes low at the end of PRU program
-static unsigned int irqNumber;              // share IRQ num within file
+static unsigned int gpio_interrupt = 15;     // pin that goes low at the end of PRU program
+static unsigned int irq_number;              // share IRQ num within file
 
 // Prototype functions for the character driver -- must come before the struct definition
 static int     dev_open(struct inode *, struct file *);
@@ -112,17 +110,13 @@ static int __init ebbchar_init(void){
       return -ENOMEM;
    }
 
-   printk(KERN_INFO "rootkit: Getting irq number\n");
-   pru_irq = gpio_to_irq(17);
-   printk(KERN_INFO "rootkit: irq: %d\n", pru_irq);
-
    printk(KERN_INFO "rootkit: button value is currently: %d\n",
-   gpio_get_value(gpioInterrupt));
-   irqNumber = gpio_to_irq(gpioInterrupt); // map GPIO to IRQ number
-   printk(KERN_INFO "rootkit: button mapped to IRQ: %d\n", irqNumber);
+   gpio_get_value(gpio_interrupt));
+   irq_number = gpio_to_irq(gpio_interrupt); // map GPIO to IRQ number
+   printk(KERN_INFO "rootkit: button mapped to IRQ: %d\n", irq_number);
 
    // This next call requests an interrupt line
-   result = request_irq(irqNumber,                  // interrupt number requested
+   int result = request_irq(irq_number,                  // interrupt number requested
             (irq_handler_t) ebb_gpio_irq_handler,   // handler function
             IRQF_TRIGGER_RISING,                    // on rising edge (press, not release)
             "ebb_gpio_handler",                     // used in /proc/interrupts
@@ -148,7 +142,7 @@ static void __exit ebbchar_exit(void){
       iounmap(shared_ram_vaddr);
    }
 
-   free_irq(irqNumber, NULL);
+   free_irq(irq_number, NULL);
    device_destroy(ebbcharClass, MKDEV(majorNumber, 0));     // remove the device
    class_unregister(ebbcharClass);                          // unregister the device class
    class_destroy(ebbcharClass);                             // remove the device class
@@ -201,8 +195,6 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
       return -EFAULT;
    }
 }
-
-
 
 /** @brief This function is called whenever the device is being written to from user space i.e.
  *  data is sent to the device from the user. The data is copied to the message[] array in this
