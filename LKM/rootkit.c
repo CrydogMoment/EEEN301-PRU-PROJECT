@@ -43,6 +43,7 @@ static unsigned int gpio_interrupt = 48;     // P9_15 pin that goes low at the e
 static unsigned int irq_number;              // share IRQ num within file
 
 DECLARE_WAIT_QUEUE_HEAD(wq);
+static int data_ready = 0;
 
 // Prototype functions for the character driver -- must come before the struct definition
 static int     dev_open(struct inode *, struct file *);
@@ -132,7 +133,7 @@ static int __init ebbchar_init(void){
 static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs) {
     printk(KERN_INFO "rootkit: PRU Interrupt Picked up by LKM!\n");
     printk(KERN_INFO "rootkit: Waking up sleepy process...\n");
-    wake_up_interruptible(&wq);
+    data_ready = 1;
 
     // Add bottom-half handling, tasklet, or wake up a wait_queue here
 
@@ -176,7 +177,7 @@ static int dev_open(struct inode *inodep, struct file *filep){
  */
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset){
     printk(KERN_INFO "rootkit: Eeping until interrupt comes through...\n");
-    interruptible_sleep_on(&wq);
+    wait_event_interruptible(&wq, data_ready);
     printk(KERN_DEBUG "rootkit: has awoken");
 
     int error_count = 0;
@@ -188,6 +189,8 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
         i ++;
     }
     error_count = copy_to_user(buffer, vals, len*4);
+
+    data_ready = 0;
 
     if (error_count == 0) {
         printk(KERN_INFO "rootkit: Sent test message to the user\n");
