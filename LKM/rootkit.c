@@ -42,7 +42,7 @@ static struct device* ebbcharDevice = NULL; // The device-driver device struct p
 static unsigned int gpio_interrupt = 48;     // P9_15 pin that goes low at the end of PRU program
 static unsigned int irq_number;              // share IRQ num within file
 
-static DECLARE_WAIT_QUEUE_HEAD(wq);
+DECLARE_WAIT_QUEUE_HEAD(wq);
 
 // Prototype functions for the character driver -- must come before the struct definition
 static int     dev_open(struct inode *, struct file *);
