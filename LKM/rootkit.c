@@ -188,8 +188,6 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
     }
     error_count = copy_to_user(buffer, vals, len*4);
 
-    data_ready = 0;
-
     if (error_count == 0) {
         printk(KERN_INFO "rootkit: Sent test message to the user\n");
         return len + 1; // Return bytes read so the user space program knows data arrived
