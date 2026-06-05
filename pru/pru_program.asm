@@ -35,14 +35,15 @@ COUNTING:
 
 ; "debounce", make sure we only count the echo as finished if it stays low
 COUNT_DEBOUNCE:
-SUB r9, r9, 1                  ; debounce countdown
+    SUB r9, r9, 1                  ; debounce countdown
 	ADD r3, r3, 1                  ; still increase echo counter in debounce mode
 	QBBS COUNTING, r31, 3          ; go back to normal counting if echo is high again
 	QBNE COUNT_DEBOUNCE, r9, 0     ; continue loop until debounce is over
 
-	LDI r9, MULTI_CONST 	; set up multiplication registers
-	LDI r8, 0		;bit logic register
-	LDI r7, 0		;where output will go
+	; multiply time by 2508, resulting in distance (micrometers)
+	LDI r9, MULTI_CONST            ; set up multiplication registers
+	LDI r8, 0                      ; bit logic register
+	LDI r7, 0                      ; where output will go
 
 MULTI_LOOP:
 	QBEQ DONE_MULTI, r3, 0
@@ -51,8 +52,8 @@ MULTI_LOOP:
 	ADD r7, r7, r9
 
 SKIP_ADD:
-	LSR r3,r3,1
-	LSL r9,r9,1
+	LSR r3, r3, 1
+	LSL r9, r9, 1
 	QBA MULTI_LOOP
 
 DONE_MULTI:
