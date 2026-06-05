@@ -3,11 +3,13 @@
 	.global START
 	.asg 32, PRU0_R31_VEC_VALID 		; allows notification of program completion
 	.asg 3, PRU_EVTOUT_0 			; the event number that is sent back
-	.asg 1000, TRIGGER_COUNT ;
+	.asg 2000, TRIGGER_COUNT ;
 	.asg 100000, SAMPLE_DELAY_1MS
+	.asg 50, DEBOUNCE
 
 ; Using register 0 for all temporary storage (reused multiple times)
 START:
+	SET r30, r30.t7
 	; Read number of samples to read and inter-sample delay
 	LDI32 r0, 0x00000000           ; load the memory location, number of samples
 	LBBO &r1, r0, 0, 4 		       ; load the value into memory - keep r1
@@ -25,23 +27,36 @@ TRIGGERING:                        ; delay for 10us
 	CLR r30, r30.t5                ; 10us over, set the triger low - pulse sent
 	; clear the counter and wait until the echo goes high
 	LDI32 r3, 0 				   ; r3 will store the echo pulse width
-	WBS r31, 3                     ; wait until the echo goes high
+
+WAIT_LOW:							;wait until trigger goes LO, then HI. 
+    	QBBC WAIT_LOW, r31, 3
+	QBA COUNTING
+
+	;WBS r31, 3                     ; wait until the echo goes high
 	; start counting (measuring echo pulse width) until the echo goes low
 
+
 COUNTING:
+	LDI r9, DEBOUNCE
 	ADD r3, r3, 1                  ; increment the counter by 1
 	QBBS COUNTING, r31, 3          ; loop if the echo is still high
+
+COUNT_DEBOUNCE:
+	SUB r9, r9, 1
+	QBBS COUNTING, r31, 3
+	QBNE COUNT_DEBOUNCE, r9, 0
+
 	; at this point the echo is now low - write the value to shared memory
 	;LDI32 r0, 0x00000008           ; going to write the result to this address
-
-	LSL r0, r1, 2					;shift right twice to multiply by 4
-	ADD r0, r0, 8					; add 8 for constant offset 
+	
+	LDI32 r0, 0
+	LSL r0, r1, 2					;shift left  twice to multiply by 4
+	ADD r0, r0, 4					; add 8 for constant offset 
 	
 	SBBO &r3, r0, 0, 4             ; store the count at this address
 	; one more sample iteration has taken place
 	SUB r1, r1, 1                  ; take 1 away from the number of iterations
 	MOV r0, r2                     ; need a delay between samples
-
 
 SAMPLEDELAY: 				       ; do this loop r2 times (1ms delay each time)
 	SUB r0, r0, 1                  ; decrement counter by 1
@@ -54,5 +69,6 @@ DELAY1MS:
 	QBNE MAINLOOP, r1, 0            ; loop if the no of iterations has not passed
 
 END:                                ; end of program, send back interrupt
+	CLR r30, r30.t7
 	LDI32 R31, (PRU0_R31_VEC_VALID|PRU_EVTOUT_0)
 	HALT                            ; halt the pru program
