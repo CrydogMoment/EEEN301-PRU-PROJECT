@@ -18,59 +18,76 @@
 #define BUFFER_LENGTH 256 ///< The buffer length (crude but fine)
 
 static uint32_t receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
+void initialisePRU();
+void stopPRU();
 void startPRU();
 void uploadRootkit();
+int runBefore = 0;
 
 int main(int argc, char *argv[]){
+    int sample_count;
     if (argc != 2) {
-        printf("Sample count argument pwease");
+        printf("Number of sensors please\n");
         return errno;
     }
-
-    int sample_count = atoi(argv[1]);
-    char *message = argv[1];
-    if (sample_count <= 0 || sample_count > 1500) {
-        printf("Sample count out of range\n");
-        return errno;
-    }
-
     //uploads the LKM
     uploadRootkit();
+    initialisePRU();
 
-    // TODO write config with lkm write fn
+    while (1){
+        printf("Enter the number of samples:");
+    
+        scanf("%d", &sample_count); 
+        printf("You entered: %d\n", sample_count);
+        
+        if (argc != 2) {
+            printf("Number of sensors argument pwease");
+            return errno;
+        }
 
-    int ret, fd;
-    printf("Starting device...\n");
-    fd = open("/dev/rootkit", O_RDWR); // Open the device with read/write access
-    if (fd < 0){
-        perror("Failed to open the device...");
-        return errno;
+        char message[10];
+        sprintf(message, "%d", sample_count);
+        if (sample_count <= 0 || sample_count > 1500) {
+            printf("Sample count out of range\n");
+            return errno;
+        }
+
+        // TODO write config with lkm write fn
+
+        int ret, fd;
+        printf("Starting device...\n");
+        fd = open("/dev/rootkit", O_RDWR); // Open the device with read/write access
+        if (fd < 0){
+            perror("Failed to open the device...");
+            return errno;
+        }
+
+        printf("Writing message to the device [%s].\n", message);
+        ret = write(fd, message, strlen(message)); // Send the string to the LKM
+        if (ret < 0){
+            perror("Failed to write the message to the device.");
+            return errno;
+        }
+
+        //starts the PRU, though I'm not sure this is where it should go. 
+        startPRU();
+
+        sleep(5);
+        // TODO in loop, poll periodically, delay
+
+        printf("Reading from the device...\n");
+        ret = read(fd, receive, sample_count); // Read the response from the LKM
+        if (ret < 0){
+            perror("Failed to read the message from the device.");
+            return errno;
+        }
+        printf("array:\n");
+        for (int i = 0; i < sample_count; i ++) {
+            printf("\t%d\n", receive[i]);
+        }
+        printf("End of the program\n");
+        
     }
-
-    printf("Writing message to the device [%s].\n", message);
-    ret = write(fd, message, strlen(message)); // Send the string to the LKM
-    if (ret < 0){
-        perror("Failed to write the message to the device.");
-        return errno;
-    }
-
-    //starts the PRU, though I'm not sure this is where it should go. 
-    startPRU();
-
-    sleep(5);
-    // TODO in loop, poll periodically, delay
-
-    printf("Reading from the device...\n");
-    ret = read(fd, receive, sample_count); // Read the response from the LKM
-    if (ret < 0){
-        perror("Failed to read the message from the device.");
-        return errno;
-    }
-    printf("array:\n");
-    for (int i = 0; i < sample_count; i ++) {
-        printf("\t%d\n", receive[i]);
-    }
-    printf("End of the program\n");
     return 0;
 }
 
@@ -89,10 +106,10 @@ void uploadRootkit(){
     }
 }
 
-void startPRU(){
+void initialisePRU(){
     char buffer[128];
     // Change directory to ../pru/ 
-    FILE *pipe = popen("cd ../pru && sh compile_script.sh && sh upload_firmware.sh", "r");
+    FILE *pipe = popen("cd ../pru && sh compile_script.sh", "r");
     
     if (pipe) {
         while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
@@ -102,4 +119,38 @@ void startPRU(){
     } else {
         perror("Failed to launch upload_firmware.sh");
     }
+}
+
+void stopPRU(){
+    char buffer[128];
+    // Change directory to ../pru/ 
+    FILE *pipe = popen("cd ../pru && sh stop_pru.sh", "r");
+    
+    if (pipe) {
+        while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+            printf("%s", buffer); // Script already prints its own newlines
+        }
+        pclose(pipe);
+    } else {
+        perror("Failed to launch upload_firmware.sh");
+    }
+}
+
+void startPRU(){
+    char buffer[128];
+    // Change directory to ../pru/ 
+    if(runBefore){
+        FILE *pipe = popen("cd ../pru && sh start_pru.sh", "r");
+    }
+    FILE *pipe = popen("cd ../pru && sh upload_firmware.sh", "r");
+    
+    if (pipe) {
+        while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+            printf("%s", buffer); // Script already prints its own newlines
+        }
+        pclose(pipe);
+    } else {
+        perror("Failed to launch upload_firmware.sh");
+    }
+    runBefore = 1;
 }
