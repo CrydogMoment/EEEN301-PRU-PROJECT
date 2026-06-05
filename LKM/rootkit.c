@@ -22,6 +22,8 @@
 #include <linux/platform_device.h>
 #include <linux/uio_driver.h>
 #include <linux/gpio.h>
+#include <linux/timekeeping.h>
+#include <linux/types.h>
 
 #define PRUSS_UIO_DEVNAME "pruss_uio"
 
@@ -175,7 +177,13 @@ static int dev_open(struct inode *inodep, struct file *filep){
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset){
     printk(KERN_INFO "rootkit: Eeping until interrupt comes through...\n");
 
-    while (data_ready == 0) {}
+    time64_t start = ktime_get_real_seconds();
+    while (data_ready == 0) {
+        if (ktime_get_real_seconds() - start > 15) {
+            printk(KERN_ALERT "rootkit: Timed out\n");
+            return -EFAULT;
+        }
+    }
 
     printk(KERN_DEBUG "rootkit: has awoken");
 
