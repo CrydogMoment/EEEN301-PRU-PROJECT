@@ -28,16 +28,17 @@ TRIGGERING:                        ; delay for 10us
 	LDI32 r3, 0 				   ; r3 will store the echo pulse width
     WBS r31, 3                     ; wait until the echo goes high
 
-COUNTING:
+RESET_DEBOUNCE:
 	LDI r9, DEBOUNCE               ; reset debounce counter
+COUNTING:
 	ADD r3, r3, 1                  ; increment the echo counter by 1
 	QBBS COUNTING, r31, 3          ; loop if the echo is still high
 
 ; "debounce", make sure we only count the echo as finished if it stays low
 COUNT_DEBOUNCE:
-    SUB r9, r9, 1                  ; debounce countdown
+    	SUB r9, r9, 1                  ; debounce countdown
 	ADD r3, r3, 1                  ; still increase echo counter in debounce mode
-	QBBS COUNTING, r31, 3          ; go back to normal counting if echo is high again
+	QBBS RESET_DEBOUNCE, r31, 3          ; go back to normal counting if echo is high again
 	QBNE COUNT_DEBOUNCE, r9, 0     ; continue loop until debounce is over
 
 	; multiply time by 2508, resulting in distance (micrometers)
