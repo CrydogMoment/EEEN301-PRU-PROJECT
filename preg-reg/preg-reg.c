@@ -82,6 +82,7 @@ int main(int argc, char *argv[]){
         int i, n;
         short revents;
         struct pollfd pfd;
+        pfd.fd = fd;
         pfd.events = POLLIN;
         while (1) {
             puts("poll");
