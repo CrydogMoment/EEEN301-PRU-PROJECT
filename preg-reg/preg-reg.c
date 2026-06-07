@@ -15,6 +15,8 @@
 #include<string.h>
 #include<unistd.h>
 #include<stdint.h>
+#include<poll.h>
+#include<assert.h>
 #define BUFFER_LENGTH 256 ///< The buffer length (crude but fine)
 
 static uint32_t receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
@@ -36,10 +38,10 @@ int main(int argc, char *argv[]){
 
     while (1){
         printf("Enter the number of samples:");
-    
-        scanf("%d", &sample_count); 
+
+        scanf("%d", &sample_count);
         printf("You entered: %d\n", sample_count);
-        
+
         if (argc != 2) {
             printf("Number of sensors argument pwease");
             return errno;
@@ -69,13 +71,33 @@ int main(int argc, char *argv[]){
             return errno;
         }
 
-        //starts the PRU, though I'm not sure this is where it should go. 
+        //starts the PRU, though I'm not sure this is where it should go.
         startPRU();
 
         sleep(5);
         // TODO in loop, poll periodically, delay
 
         printf("Reading from the device...\n");
+
+        int i, n;
+        short revents;
+        struct pollfd pfd;
+        pfd.events = POLLIN;
+        while (1) {
+            puts("poll");
+            i = poll(&pfd, 1, -1);
+            if (i == -1) {
+                perror("poll");
+                assert(0);
+            }
+            revents = pfd.revents;
+            printf("revents = %d\n", revents);
+            if (revents & POLLIN) {
+                n = read(pfd.fd, message, sizeof(message));
+                printf("POLLIN n=%d buf=%.*s\n", n, n, message);
+            }
+        }
+
         ret = read(fd, receive, sample_count); // Read the response from the LKM
         if (ret < 0){
             perror("Failed to read the message from the device.");
@@ -86,16 +108,16 @@ int main(int argc, char *argv[]){
             printf("\t%d\n", receive[i]);
         }
         printf("End of the program\n");
-        
+
     }
     return 0;
 }
 
 void uploadRootkit(){
     char buffer[128];
-    // Change directory to ../LKM/ 
+    // Change directory to ../LKM/
     FILE *pipe = popen("cd ../LKM && sh remove-rootkit.sh && sh upload-rootkit.sh", "r");
-    
+
     if (pipe) {
         while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
             printf("%s", buffer); // Script already prints its own newlines
@@ -108,9 +130,9 @@ void uploadRootkit(){
 
 void initialisePRU(){
     char buffer[128];
-    // Change directory to ../pru/ 
+    // Change directory to ../pru/
     FILE *pipe = popen("cd ../pru && sh compile_script.sh", "r");
-    
+
     if (pipe) {
         while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
             printf("%s", buffer); // Script already prints its own newlines
@@ -123,9 +145,9 @@ void initialisePRU(){
 
 void stopPRU(){
     char buffer[128];
-    // Change directory to ../pru/ 
+    // Change directory to ../pru/
     FILE *pipe = popen("cd ../pru && sh stop_pru.sh", "r");
-    
+
     if (pipe) {
         while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
             printf("%s", buffer); // Script already prints its own newlines
@@ -138,12 +160,12 @@ void stopPRU(){
 
 void startPRU(){
     char buffer[128];
-    // Change directory to ../pru/ 
+    // Change directory to ../pru/
     if(runBefore){
         FILE *pipe = popen("cd ../pru && sh start_pru.sh", "r");
     }
     FILE *pipe = popen("cd ../pru && sh upload_firmware.sh", "r");
-    
+
     if (pipe) {
         while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
             printf("%s", buffer); // Script already prints its own newlines

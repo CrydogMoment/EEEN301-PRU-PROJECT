@@ -22,6 +22,8 @@
 #include <linux/platform_device.h>
 #include <linux/uio_driver.h>
 #include <linux/gpio.h>
+#include <linux/wait.h>
+#include <linux/poll.h>
 
 #define PRUSS_UIO_DEVNAME "pruss_uio"
 
@@ -52,8 +54,11 @@ static ssize_t dev_write(struct file *, const char *, size_t, loff_t *);
 
 void __iomem *shared_ram_vaddr;
 
+static DECLARE_WAIT_QUEUE_HEAD(rootkit_wait);
+static int data_ready = 0;
+
 /** @brief Devices are represented as file structure in the kernel. The file_operations structure from
- *  /linux/fs.h lists the callback functions that you wish to associated with your file operations
+ *  /linux/fs.h lists the callback functions that you wish to be associated with your file operations
  *  using a C99 syntax structure. char devices usually implement open, read, write and release calls
  */
 static struct file_operations fops =
@@ -62,7 +67,21 @@ static struct file_operations fops =
    .read = dev_read,
    .write = dev_write,
    .release = dev_release,
+   .poll = dev_poll,
 };
+
+static unsigned int dev_poll(struct file *file, poll_table *wait) {
+    printk(KERN_INFO "rootkit: poll");
+    poll_wait(file, &rootkit_wait, wait);
+
+    // you should return POLLIN | POLLRDNORM if you have some new data to read, and 0 in case there is no new data to read
+    if (data_ready) {
+        printk(KERN_INFO "rootkit: Data ready!");
+        return POLLIN | POLLRDNORM;
+    }
+    printk(KERN_INFO "rootkit: Poll return 0");
+    return 0;
+}
 
 // prototype for the custom IRQ handler function, function below
 static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs);
@@ -127,6 +146,7 @@ static int __init ebbchar_init(void){
 
 static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs) {
     printk(KERN_INFO "rootkit: PRU Interrupt Picked up by LKM!\n");
+    data_ready = 1;
 
     return (irq_handler_t) IRQ_HANDLED;
 }
