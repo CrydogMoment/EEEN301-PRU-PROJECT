@@ -22,8 +22,6 @@
 #include <linux/platform_device.h>
 #include <linux/uio_driver.h>
 #include <linux/gpio.h>
-#include <linux/semaphore.h>
-#include <linux/delay.h>
 
 #define PRUSS_UIO_DEVNAME "pruss_uio"
 
@@ -41,8 +39,6 @@ static struct class*  ebbcharClass  = NULL; // The device-driver class struct po
 static struct device* ebbcharDevice = NULL; // The device-driver device struct pointer
 static unsigned int gpio_interrupt = 48;     // P9_15 pin that goes low at the end of PRU program
 static unsigned int irq_number;              // share IRQ num within file
-
-static DEFINE_SEMAPHORE(data_ready_sem);
 
 // Prototype functions for the character driver -- must come before the struct definition
 static int     dev_open(struct inode *, struct file *);
@@ -132,8 +128,6 @@ static int __init ebbchar_init(void){
 static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs) {
     printk(KERN_INFO "rootkit: PRU Interrupt Picked up by LKM!\n");
 
-    up(&data_ready_sem);
-
     return (irq_handler_t) IRQ_HANDLED;
 }
 
@@ -173,11 +167,6 @@ static int dev_open(struct inode *inodep, struct file *filep){
  *  @param offset The offset if required
  */
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset) {
-    if (down_interruptible(&data_ready_sem)) {
-        pr_alert("rootkit: Semaphore acquisition interrupted!\n");
-        return -ERESTARTSYS;
-    }
-
     int error_count = 0;
 
     u32 vals[len];
