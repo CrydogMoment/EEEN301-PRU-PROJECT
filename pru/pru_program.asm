@@ -6,7 +6,7 @@
 	.asg 2000, TRIGGER_COUNT ;
 	.asg 100000, SAMPLE_DELAY_1MS
 	.asg 50, DEBOUNCE
-	.asg 2508, MULTI_CONST
+	.asg 1672, MULTI_CONST
 
 ; Using register 0 for temporary storage
 START:
@@ -31,13 +31,14 @@ TRIGGERING:                        ; delay for 10us
 RESET_DEBOUNCE:
 	LDI r9, DEBOUNCE               ; reset debounce counter
 COUNTING:
+
 	ADD r3, r3, 1                  ; increment the echo counter by 1
 	QBBS COUNTING, r31, 3          ; loop if the echo is still high
 
 ; "debounce", make sure we only count the echo as finished if it stays low
 COUNT_DEBOUNCE:
     	SUB r9, r9, 1                  ; debounce countdown
-	ADD r3, r3, 1                  ; still increase echo counter in debounce mode
+	ADD r3, r3, 2                  ; still increase echo counter in debounce mode
 	QBBS RESET_DEBOUNCE, r31, 3          ; go back to normal counting if echo is high again
 	QBNE COUNT_DEBOUNCE, r9, 0     ; continue loop until debounce is over
 
