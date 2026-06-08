@@ -57,12 +57,10 @@ int main(int argc, char *argv[]){
 
         char message[10];
         sprintf(message, "%d", sample_count);
-        if (sample_count <= 0 || sample_count > 1500) {
+        if (sample_count <= 0 || sample_count > 100) {
             printf("Sample count out of range\n");
             return errno;
         }
-
-        
 
         printf("Writing message to the device [%s].\n", message);
         ret = write(fd, message, strlen(message)); // Send the string to the LKM
@@ -74,10 +72,6 @@ int main(int argc, char *argv[]){
         //starts the PRU, though I'm not sure this is where it should go.
         startPRU();
 
-        //TODO: in loop, poll periodically, delay  ( ͡° ͜ʖ ͡°) 
-
-        //¯\_(ツ)_/¯ why does this not work?? ¯\_(ツ)_/¯ who knowss
-
         printf("Reading from the device...\n");
 
         int i, n;
@@ -85,26 +79,25 @@ int main(int argc, char *argv[]){
         struct pollfd pfd;
         pfd.fd = fd;
         pfd.events = POLLIN;
-        puts("poll");
-        i = poll(&pfd, 1, 5000);
+        i = poll(&pfd, 1, sample_count * 100);
         if (i == -1) {
             perror("poll");
             assert(0);
         }
         revents = pfd.revents;
-        printf("revents = %d\n", revents);
         if (revents & POLLIN) {
             n = read(pfd.fd, receive, sample_count);
-            //printf("POLLIN n= %d buf= %.*s\n", n, n, receive);
-
             printf("array:\n");
+            double sum = 0.0;
             for (int i = 0; i < sample_count; i ++) {
                 uint32_t num = receive[i];
 
                 double scaled_down = num / 10000000.0; 
+                sum += scaled_down;
 
-                printf("\t%.4f\n", scaled_down);
+                printf("\t%.4fcm\n", scaled_down);
             }
+            printf("\nAverage:\n\t%.4fcm\n", sum / sample_count);
         } else {
             printf("Poll failed\n");
         }
