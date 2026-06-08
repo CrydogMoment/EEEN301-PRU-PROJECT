@@ -36,6 +36,14 @@ int main(int argc, char *argv[]){
     uploadRootkit();
     initialisePRU();
 
+    int ret, fd;
+    printf("Starting device...\n");
+    fd = open("/dev/rootkit", O_RDWR); // Open the device with read/write access
+    if (fd < 0){
+        perror("Failed to open the device...");
+        return errno;
+    }
+
     while (1){
         printf("Enter the number of samples:");
 
@@ -54,15 +62,7 @@ int main(int argc, char *argv[]){
             return errno;
         }
 
-        // TODO write config with lkm write fn
-
-        int ret, fd;
-        printf("Starting device...\n");
-        fd = open("/dev/rootkit", O_RDWR); // Open the device with read/write access
-        if (fd < 0){
-            perror("Failed to open the device...");
-            return errno;
-        }
+        
 
         printf("Writing message to the device [%s].\n", message);
         ret = write(fd, message, strlen(message)); // Send the string to the LKM
@@ -74,6 +74,10 @@ int main(int argc, char *argv[]){
         //starts the PRU, though I'm not sure this is where it should go.
         startPRU();
 
+        //TODO: in loop, poll periodically, delay  ( ͡° ͜ʖ ͡°) 
+
+        //¯\_(ツ)_/¯ why does this not work?? ¯\_(ツ)_/¯ who knowss
+
         printf("Reading from the device...\n");
 
         int i, n;
@@ -82,7 +86,7 @@ int main(int argc, char *argv[]){
         pfd.fd = fd;
         pfd.events = POLLIN;
         puts("poll");
-        i = poll(&pfd, 1, -1);
+        i = poll(&pfd, 1, 5000);
         if (i == -1) {
             perror("poll");
             assert(0);
@@ -90,15 +94,17 @@ int main(int argc, char *argv[]){
         revents = pfd.revents;
         printf("revents = %d\n", revents);
         if (revents & POLLIN) {
+            //sleep(1);
             n = read(pfd.fd, receive, sample_count);
-            printf("POLLIN n=%d\n", n);
+            //printf("POLLIN n= %d buf= %.*s\n", n, n, receive);
 
             printf("array:\n");
             for (int i = 0; i < sample_count; i ++) {
+                float num = i;
                 printf("\t%u\n", receive[i]);
             }
         } else {
-            printf("Poll failed");
+            printf("Poll failed\n");
         }
 
         printf("End of the program\n");
@@ -153,12 +159,13 @@ void stopPRU(){
 
 void startPRU(){
     char buffer[128];
+    FILE *pipe;
     // Change directory to ../pru/
-    if(runBefore){
-        FILE *pipe = popen("cd ../pru && sh start_pru.sh", "r");
-    }
-    FILE *pipe = popen("cd ../pru && sh upload_firmware.sh", "r");
-
+    //if(runBefore){
+    //    pipe = popen("cd ../pru && sh start_pru.sh", "r");
+    //}else{
+        pipe = popen("cd ../pru && sh upload_firmware.sh", "r");
+    //}
     if (pipe) {
         while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
             printf("%s", buffer); // Script already prints its own newlines
