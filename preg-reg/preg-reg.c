@@ -94,14 +94,16 @@ int main(int argc, char *argv[]){
         revents = pfd.revents;
         printf("revents = %d\n", revents);
         if (revents & POLLIN) {
-            //sleep(1);
             n = read(pfd.fd, receive, sample_count);
             //printf("POLLIN n= %d buf= %.*s\n", n, n, receive);
 
             printf("array:\n");
             for (int i = 0; i < sample_count; i ++) {
-                float num = i;
-                printf("\t%u\n", receive[i]);
+                uint32_t num = receive[i];
+
+                double scaled_down = num / 10000000.0; 
+
+                printf("\t%.4f\n", scaled_down);
             }
         } else {
             printf("Poll failed\n");
