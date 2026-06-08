@@ -49,6 +49,9 @@ static ssize_t dev_read(struct file *, char *, size_t, loff_t *);
 static ssize_t dev_write(struct file *, const char *, size_t, loff_t *);
 static unsigned int dev_poll(struct file *file, poll_table *wait);
 
+// prototype for the custom IRQ handler function, function below
+static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs);
+
 //added for writing to shared RAM
 #define PRUSS_SHARED_RAM_PADDR 0x4A300000
 #define PRUSS_SHARED_RAM_SIZE  0x3000 // 12 KB
@@ -72,7 +75,7 @@ static struct file_operations fops =
 };
 
 static unsigned int dev_poll(struct file *file, poll_table *wait) {
-    printk(KERN_INFO "rootkit: poll");
+    printk(KERN_INFO "rootkit: poll AAAAAAA");
     poll_wait(file, &rootkit_wait, wait);
 
     // you should return POLLIN | POLLRDNORM if you have some new data to read, and 0 in case there is no new data to read
@@ -84,9 +87,6 @@ static unsigned int dev_poll(struct file *file, poll_table *wait) {
     printk(KERN_INFO "rootkit: Poll return 0");
     return 0;
 }
-
-// prototype for the custom IRQ handler function, function below
-static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs);
 
 /** @brief The LKM initialization function
  *  The static keyword restricts the visibility of the function to within this C file. The __init
@@ -139,7 +139,7 @@ static int __init ebbchar_init(void){
    // This next call requests an interrupt line
    int result = request_irq(irq_number,                  // interrupt number requested
             (irq_handler_t) ebb_gpio_irq_handler,   // handler function
-            IRQF_TRIGGER_RISING,                    // on rising edge (press, not release)
+            IRQF_TRIGGER_FALLING,                    // on rising edge (press, not release)
             "ebb_gpio_handler",                     // used in /proc/interrupts
             NULL);                                  // *dev_id for shared interrupt lines
    printk(KERN_INFO "rootkit: IRQ request result is: %d\n", result);
@@ -148,7 +148,8 @@ static int __init ebbchar_init(void){
 
 static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs) {
     printk(KERN_INFO "rootkit: PRU Interrupt Picked up by LKM!\n");
-    data_ready = 1;
+   data_ready = 1;
+   wake_up(&rootkit_wait);
 
     return (irq_handler_t) IRQ_HANDLED;
 }
