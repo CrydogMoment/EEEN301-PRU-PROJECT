@@ -1,9 +1,9 @@
 	.cdecls "main.c"
 	.clink
 	.global START
-	.asg 32, PRU0_R31_VEC_VALID 		; allows notification of program completion
+	.asg 32, PRU0_R31_VEC_VALID 	; allows notification of program completion
 	.asg 3, PRU_EVTOUT_0 			; the event number that is sent back
-	.asg 2000, TRIGGER_COUNT ;
+	.asg 2000, TRIGGER_COUNT        ; length of trigger pulse
 	.asg 100000, SAMPLE_DELAY_1MS
 	.asg 50, DEBOUNCE
 	.asg 1672, MULTI_CONST
@@ -30,16 +30,16 @@ TRIGGERING:                        ; delay for 10us
 
 RESET_DEBOUNCE:
 	LDI r9, DEBOUNCE               ; reset debounce counter
-COUNTING:
 
+COUNTING:
 	ADD r3, r3, 1                  ; increment the echo counter by 1
 	QBBS COUNTING, r31, 3          ; loop if the echo is still high
 
-; "debounce", make sure we only count the echo as finished if it stays low
+; "debounce", make sure we only count the echo as finished if it stays low for a while
 COUNT_DEBOUNCE:
-    	SUB r9, r9, 1                  ; debounce countdown
-	ADD r3, r3, 2                  ; still increase echo counter in debounce mode
-	QBBS RESET_DEBOUNCE, r31, 3          ; go back to normal counting if echo is high again
+    SUB r9, r9, 1                  ; debounce countdown
+	ADD r3, r3, 2                  ; still increase echo counter in debounce mode. by 2 because we're counting in clock cycles, don't worry about it!
+	QBBS RESET_DEBOUNCE, r31, 3    ; go back to normal counting if echo is high again
 	QBNE COUNT_DEBOUNCE, r9, 0     ; continue loop until debounce is over
 
 	; multiply time by 2508, resulting in distance (micrometers)
@@ -47,6 +47,7 @@ COUNT_DEBOUNCE:
 	LDI r8, 0                      ; bit logic register
 	LDI r7, 0                      ; where output will go
 
+; Multiply clock cycle count by MULTI_CONST to turn time into distance (nm)
 MULTI_LOOP:
 	QBEQ DONE_MULTI, r3, 0
 	AND r8, r3, 1
@@ -83,5 +84,5 @@ DELAY1MS:
 	QBNE MAINLOOP, r1, 0            ; loop if the number of iterations has not passed
 
 END:
-    CLR r30, r30.t7                 ; clear pru output pin, use this as a GPIO interrupt
+    CLR r30, r30.t7                 ; Clear pru output pin, used to trigger GPIO interrupt
 	HALT                            ; halt the pru program

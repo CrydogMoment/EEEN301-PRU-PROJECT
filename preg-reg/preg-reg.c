@@ -73,7 +73,6 @@ int main(int argc, char *argv[]){
         startPRU();
 
         printf("Reading from the device...\n");
-
         int i, n;
         short revents;
         struct pollfd pfd;
@@ -92,7 +91,7 @@ int main(int argc, char *argv[]){
             for (int i = 0; i < sample_count; i ++) {
                 uint32_t num = receive[i];
 
-                double scaled_down = num / 10000000.0; 
+                double scaled_down = num / 10000000.0;
                 sum += scaled_down;
 
                 printf("\t%.4fcm\n", scaled_down);
@@ -124,7 +123,6 @@ void uploadRootkit(){
 
 void initialisePRU(){
     char buffer[128];
-    // Change directory to ../pru/
     FILE *pipe = popen("cd ../pru && sh compile_script.sh", "r");
 
     if (pipe) {
@@ -154,13 +152,14 @@ void stopPRU(){
 
 void startPRU(){
     char buffer[128];
-    FILE *pipe;
-    // Change directory to ../pru/
-    //if(runBefore){
-    //    pipe = popen("cd ../pru && sh start_pru.sh", "r");
-    //}else{
-        pipe = popen("cd ../pru && sh upload_firmware.sh", "r");
-    //}
+
+    // TODO... do we really have to upload firmware EVERY time?
+    // FILE *pipe;
+    // if (runBefore) { pipe = popen("cd ../pru && sh start_pru.sh", "r"); }
+    // else { pipe = popen("cd ../pru && sh upload_firmware.sh", "r"); }
+
+    FILE *pipe = popen("cd ../pru && sh upload_firmware.sh", "r");
+
     if (pipe) {
         while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
             printf("%s", buffer); // Script already prints its own newlines
@@ -169,5 +168,5 @@ void startPRU(){
     } else {
         perror("Failed to launch upload_firmware.sh");
     }
-    runBefore = 1;
+    runBefore = 1; // compiler will totally unroll this, right?
 }

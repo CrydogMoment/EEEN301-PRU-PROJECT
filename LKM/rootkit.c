@@ -42,20 +42,17 @@ static struct device* ebbcharDevice = NULL; // The device-driver device struct p
 static unsigned int gpio_interrupt = 48;     // P9_15 pin that goes low at the end of PRU program
 static unsigned int irq_number;              // share IRQ num within file
 
-// Prototype functions for the character driver -- must come before the struct definition
-static int     dev_open(struct inode *, struct file *);
-static int     dev_release(struct inode *, struct file *);
-static ssize_t dev_read(struct file *, char *, size_t, loff_t *);
-static ssize_t dev_write(struct file *, const char *, size_t, loff_t *);
+// Prototype functions for the character driver (must come before the struct definition)
+static int          dev_open(struct inode *, struct file *);
+static int          dev_release(struct inode *, struct file *);
+static ssize_t      dev_read(struct file *, char *, size_t, loff_t *);
+static ssize_t      dev_write(struct file *, const char *, size_t, loff_t *);
 static unsigned int dev_poll(struct file *file, poll_table *wait);
-
-// prototype for the custom IRQ handler function, function below
 static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs);
 
-//added for writing to shared RAM
-#define PRUSS_SHARED_RAM_PADDR 0x4A300000
-#define PRUSS_SHARED_RAM_SIZE  0x3000 // 12 KB
-
+// For writing to shared RAM
+#define PRUSS_SHARED_RAM_PADDR 0x4A300000   // absolute address to PRU shared RAM address
+#define PRUSS_SHARED_RAM_SIZE  0x2EE0       // 12 KB
 void __iomem *shared_ram_vaddr;
 
 static DECLARE_WAIT_QUEUE_HEAD(rootkit_wait);
@@ -96,7 +93,7 @@ static unsigned int dev_poll(struct file *file, poll_table *wait) {
 static int __init ebbchar_init(void){
    printk(KERN_INFO "rootkit: Initializing the rootkit LKM\n");
 
-   // Try to dynamically allocate a major number for the device -- more difficult but worth it
+   // Try to dynamically allocate a major number for the device
    majorNumber = register_chrdev(0, DEVICE_NAME, &fops);
    if (majorNumber<0){
       printk(KERN_ERR "rootkit: failed to register a major number\n");
@@ -106,17 +103,17 @@ static int __init ebbchar_init(void){
 
    // Register the device class
    ebbcharClass = class_create(THIS_MODULE, CLASS_NAME);
-   if (IS_ERR(ebbcharClass)){                // Check for error and clean up if there is
+   if (IS_ERR(ebbcharClass)) {  // Clean up if there is an error
       unregister_chrdev(majorNumber, DEVICE_NAME);
       printk(KERN_ERR "rootkit: Failed to register device class\n");
-      return PTR_ERR(ebbcharClass);          // Correct way to return an error on a pointer
+      return PTR_ERR(ebbcharClass);
    }
    printk(KERN_INFO "rootkit: device class registered correctly\n");
 
    // Register the device driver
    ebbcharDevice = device_create(ebbcharClass, NULL, MKDEV(majorNumber, 0), NULL, DEVICE_NAME);
-   if (IS_ERR(ebbcharDevice)){               // Clean up if there is an error
-      class_destroy(ebbcharClass);           // Repeated code but the alternative is goto statements
+   if (IS_ERR(ebbcharDevice)) {
+      class_destroy(ebbcharClass);  // Now repeated code, could goto as alternative
       unregister_chrdev(majorNumber, DEVICE_NAME);
       printk(KERN_ERR "rootkit: Failed to create the device\n");
       return PTR_ERR(ebbcharDevice);
@@ -124,7 +121,6 @@ static int __init ebbchar_init(void){
 
    // Map physical address to kernel virtual address
    shared_ram_vaddr = ioremap(PRUSS_SHARED_RAM_PADDR, PRUSS_SHARED_RAM_SIZE);
-
    if (!shared_ram_vaddr) {
       printk(KERN_ERR "rootkit: Failed to map shared RAM\n");
       return -ENOMEM;
@@ -132,15 +128,15 @@ static int __init ebbchar_init(void){
 
    printk(KERN_INFO "rootkit: button value is currently: %d\n",
    gpio_get_value(gpio_interrupt));
-   irq_number = gpio_to_irq(gpio_interrupt); // map GPIO to IRQ number
+   irq_number = gpio_to_irq(gpio_interrupt);    // map GPIO to IRQ number
    printk(KERN_INFO "rootkit: button mapped to IRQ: %d\n", irq_number);
 
-   // This next call requests an interrupt line
-   int result = request_irq(irq_number,             // interrupt number requested
-            (irq_handler_t) ebb_gpio_irq_handler,   // handler function
-            IRQF_TRIGGER_FALLING,                   // on falling edge
-            "ebb_gpio_handler",                     // used in /proc/interrupts
-            NULL);                                  // *dev_id for shared interrupt lines (N/A)
+   // Request an interrupt line
+   int result = request_irq(irq_number,         // interrupt number requested
+        (irq_handler_t) ebb_gpio_irq_handler,   // handler function
+        IRQF_TRIGGER_FALLING,                   // on FALLING edge!
+        "ebb_gpio_handler",                     // used in /proc/interrupts
+        NULL);                                  // *dev_id for shared interrupt lines (N/A)
    printk(KERN_INFO "rootkit: IRQ request result is: %d\n", result);
    return result;
 }
@@ -157,9 +153,7 @@ static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct
  *  code is used for a built-in driver (not a LKM) that this function is not required.
  */
 static void __exit ebbchar_exit(void){
-   if (shared_ram_vaddr) {
-      iounmap(shared_ram_vaddr);
-   }
+   if (shared_ram_vaddr) { iounmap(shared_ram_vaddr); }
 
    free_irq(irq_number, NULL);
    device_destroy(ebbcharClass, MKDEV(majorNumber, 0));     // remove the device
