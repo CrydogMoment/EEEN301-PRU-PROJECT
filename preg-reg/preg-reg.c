@@ -74,9 +74,6 @@ int main(int argc, char *argv[]){
         //starts the PRU, though I'm not sure this is where it should go.
         startPRU();
 
-        sleep(5);
-        // TODO in loop, poll periodically, delay
-
         printf("Reading from the device...\n");
 
         int i, n;
@@ -94,11 +91,11 @@ int main(int argc, char *argv[]){
         printf("revents = %d\n", revents);
         if (revents & POLLIN) {
             n = read(pfd.fd, receive, sample_count);
-            printf("POLLIN n=%d buf=%.*s\n", n, n, receive);
+            printf("POLLIN n=%d\n", n);
 
             printf("array:\n");
             for (int i = 0; i < sample_count; i ++) {
-                printf("\t%d\n", receive[i]);
+                printf("\t%u\n", receive[i]);
             }
         } else {
             printf("Poll failed");
