@@ -47,6 +47,7 @@ static int     dev_open(struct inode *, struct file *);
 static int     dev_release(struct inode *, struct file *);
 static ssize_t dev_read(struct file *, char *, size_t, loff_t *);
 static ssize_t dev_write(struct file *, const char *, size_t, loff_t *);
+static unsigned int dev_poll(struct file *file, poll_table *wait);
 
 //added for writing to shared RAM
 #define PRUSS_SHARED_RAM_PADDR 0x4A300000

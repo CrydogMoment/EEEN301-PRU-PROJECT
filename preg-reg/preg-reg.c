@@ -84,32 +84,27 @@ int main(int argc, char *argv[]){
         struct pollfd pfd;
         pfd.fd = fd;
         pfd.events = POLLIN;
-        while (1) {
-            puts("poll");
-            i = poll(&pfd, 1, -1);
-            if (i == -1) {
-                perror("poll");
-                assert(0);
+        puts("poll");
+        i = poll(&pfd, 1, -1);
+        if (i == -1) {
+            perror("poll");
+            assert(0);
+        }
+        revents = pfd.revents;
+        printf("revents = %d\n", revents);
+        if (revents & POLLIN) {
+            n = read(pfd.fd, receive, sample_count);
+            printf("POLLIN n=%d buf=%.*s\n", n, n, receive);
+
+            printf("array:\n");
+            for (int i = 0; i < sample_count; i ++) {
+                printf("\t%d\n", receive[i]);
             }
-            revents = pfd.revents;
-            printf("revents = %d\n", revents);
-            if (revents & POLLIN) {
-                n = read(pfd.fd, message, sizeof(message));
-                printf("POLLIN n=%d buf=%.*s\n", n, n, message);
-            }
+        } else {
+            printf("Poll failed");
         }
 
-        ret = read(fd, receive, sample_count); // Read the response from the LKM
-        if (ret < 0){
-            perror("Failed to read the message from the device.");
-            return errno;
-        }
-        printf("array:\n");
-        for (int i = 0; i < sample_count; i ++) {
-            printf("\t%d\n", receive[i]);
-        }
         printf("End of the program\n");
-
     }
     return 0;
 }
