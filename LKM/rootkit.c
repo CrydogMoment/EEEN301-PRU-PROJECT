@@ -75,16 +75,15 @@ static struct file_operations fops =
 };
 
 static unsigned int dev_poll(struct file *file, poll_table *wait) {
-    printk(KERN_INFO "rootkit: poll AAAAAAA");
+    printk(KERN_INFO "rootkit: Poll");
     poll_wait(file, &rootkit_wait, wait);
 
-    // you should return POLLIN | POLLRDNORM if you have some new data to read, and 0 in case there is no new data to read
     if (data_ready == 1) {
         printk(KERN_INFO "rootkit: Data ready!");
         data_ready = 0;
         return POLLIN | POLLRDNORM;
     }
-    printk(KERN_INFO "rootkit: Poll return 0");
+    printk(KERN_INFO "rootkit: Data not ready.");
     return 0;
 }
 
@@ -137,20 +136,19 @@ static int __init ebbchar_init(void){
    printk(KERN_INFO "rootkit: button mapped to IRQ: %d\n", irq_number);
 
    // This next call requests an interrupt line
-   int result = request_irq(irq_number,                  // interrupt number requested
+   int result = request_irq(irq_number,             // interrupt number requested
             (irq_handler_t) ebb_gpio_irq_handler,   // handler function
-            IRQF_TRIGGER_FALLING,                    // on rising edge (press, not release)
+            IRQF_TRIGGER_FALLING,                   // on falling edge
             "ebb_gpio_handler",                     // used in /proc/interrupts
-            NULL);                                  // *dev_id for shared interrupt lines
+            NULL);                                  // *dev_id for shared interrupt lines (N/A)
    printk(KERN_INFO "rootkit: IRQ request result is: %d\n", result);
    return result;
 }
 
 static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs) {
     printk(KERN_INFO "rootkit: PRU Interrupt Picked up by LKM!\n");
-   data_ready = 1;
-   wake_up(&rootkit_wait);
-
+    data_ready = 1;
+    wake_up(&rootkit_wait);
     return (irq_handler_t) IRQ_HANDLED;
 }
 
@@ -238,9 +236,6 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 
     //  null-terminate the string so parsing functions work safely
     kbuf[len] = '\0';
-
-    //    Convert the ASCII string into an actual integer
-    //    kstrtoint handles white spaces and returns 0 on success
     if (kstrtoint(kbuf, 10, &user_value) != 0) {
         printk(KERN_ALERT "rootkit: Invalid integer string received\n");
         return -EINVAL;
