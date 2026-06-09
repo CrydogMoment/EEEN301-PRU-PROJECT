@@ -46,9 +46,7 @@ int main(int argc, char *argv[]){
 
     while (1){
         printf("Enter the number of samples:");
-
         scanf("%d", &sample_count);
-        printf("You entered: %d\n", sample_count);
 
         if (argc != 2) {
             printf("Number of sensors argument pwease");
@@ -107,57 +105,27 @@ int main(int argc, char *argv[]){
 }
 
 void uploadRootkit(){
-    char buffer[128];
-    // Change directory to ../LKM/
     FILE *pipe = popen("cd ../LKM && sh remove-rootkit.sh && sh upload-rootkit.sh", "r");
-
-    if (pipe) {
-        while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
-            printf("%s", buffer); // Script already prints its own newlines
-        }
-        pclose(pipe);
-    } else {
-        perror("Failed to launch upload_firmware.sh");
-    }
+    if (pipe) { pclose(pipe); } else { perror("Failed to upload rootkit"); }
 }
 
 void initialisePRU(){
-    char buffer[128];
     FILE *pipe = popen("cd ../pru && sh compile_script.sh", "r");
-
-    if (pipe) {
-        pclose(pipe);
-    } else {
-        perror("Failed to launch upload_firmware.sh");
-    }
+    if (pipe) { pclose(pipe); } else { perror("Failed to initialize PRU"); }
 }
 
 void stopPRU(){
-    char buffer[128];
-    // Change directory to ../pru/
     FILE *pipe = popen("cd ../pru && sh stop_pru.sh", "r");
-
-    if (pipe) {
-        pclose(pipe);
-    } else {
-        perror("Failed to launch upload_firmware.sh");
-    }
+    if (pipe) { pclose(pipe); } else { perror("Failed to stop PRU"); }
 }
 
 void startPRU(){
-    char buffer[128];
-
     // TODO... do we really have to upload firmware EVERY time?
     // FILE *pipe;
     // if (runBefore) { pipe = popen("cd ../pru && sh start_pru.sh", "r"); }
     // else { pipe = popen("cd ../pru && sh upload_firmware.sh", "r"); }
 
     FILE *pipe = popen("cd ../pru && sh upload_firmware.sh", "r");
-
-    if (pipe) {
-        pclose(pipe);
-    } else {
-        perror("Failed to launch upload_firmware.sh");
-    }
+    if (pipe) { pclose(pipe); } else { perror("Failed to start PRU"); }
     runBefore = 1; // compiler will totally unroll this, right?
 }
