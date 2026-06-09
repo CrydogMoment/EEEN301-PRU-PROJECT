@@ -126,9 +126,6 @@ void initialisePRU(){
     FILE *pipe = popen("cd ../pru && sh compile_script.sh", "r");
 
     if (pipe) {
-        while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
-            printf("%s", buffer); // Script already prints its own newlines
-        }
         pclose(pipe);
     } else {
         perror("Failed to launch upload_firmware.sh");
@@ -141,9 +138,6 @@ void stopPRU(){
     FILE *pipe = popen("cd ../pru && sh stop_pru.sh", "r");
 
     if (pipe) {
-        while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
-            printf("%s", buffer); // Script already prints its own newlines
-        }
         pclose(pipe);
     } else {
         perror("Failed to launch upload_firmware.sh");
@@ -161,9 +155,6 @@ void startPRU(){
     FILE *pipe = popen("cd ../pru && sh upload_firmware.sh", "r");
 
     if (pipe) {
-        while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
-            printf("%s", buffer); // Script already prints its own newlines
-        }
         pclose(pipe);
     } else {
         perror("Failed to launch upload_firmware.sh");
