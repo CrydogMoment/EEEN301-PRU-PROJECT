@@ -26,6 +26,8 @@ void startPRU();
 void uploadRootkit();
 int runBefore = 0;
 
+static char pipe_buf[128];
+
 int main(int argc, char *argv[]){
     int sample_count;
     if (argc != 2) {
@@ -106,17 +108,26 @@ int main(int argc, char *argv[]){
 
 void uploadRootkit(){
     FILE *pipe = popen("cd ../LKM && sh remove-rootkit.sh && sh upload-rootkit.sh", "r");
-    if (pipe) { pclose(pipe); } else { perror("Failed to upload rootkit"); }
+    if (pipe) {
+        while (fgets(pipe_buf, sizeof(pipe_buf), pipe) != NULL);
+        pclose(pipe);
+    } else { perror("Failed to upload rootkit"); }
 }
 
 void initialisePRU(){
     FILE *pipe = popen("cd ../pru && sh compile_script.sh", "r");
-    if (pipe) { pclose(pipe); } else { perror("Failed to initialize PRU"); }
+    if (pipe) {
+        while (fgets(pipe_buf, sizeof(pipe_buf), pipe) != NULL);
+        pclose(pipe);
+    } else { perror("Failed to initialize PRU"); }
 }
 
 void stopPRU(){
     FILE *pipe = popen("cd ../pru && sh stop_pru.sh", "r");
-    if (pipe) { pclose(pipe); } else { perror("Failed to stop PRU"); }
+    if (pipe) {
+        while (fgets(pipe_buf, sizeof(pipe_buf), pipe) != NULL);
+        pclose(pipe);
+    } else { perror("Failed to stop PRU"); }
 }
 
 void startPRU(){
@@ -126,6 +137,9 @@ void startPRU(){
     // else { pipe = popen("cd ../pru && sh upload_firmware.sh", "r"); }
 
     FILE *pipe = popen("cd ../pru && sh upload_firmware.sh", "r");
-    if (pipe) { pclose(pipe); } else { perror("Failed to start PRU"); }
+    if (pipe) {
+        while (fgets(pipe_buf, sizeof(pipe_buf), pipe) != NULL);
+        pclose(pipe);
+    } else { perror("Failed to start PRU"); }
     runBefore = 1; // compiler will totally unroll this, right?
 }
