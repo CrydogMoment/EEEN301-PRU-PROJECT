@@ -10,5 +10,6 @@ extern void START(void);
 void main(void) {
     //shared[0] = 20;
     shared[1] = 20;     // Sample delay in ms
+	shared[2] = 3;
 	START();
 }
