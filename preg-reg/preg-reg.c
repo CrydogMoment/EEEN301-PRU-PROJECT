@@ -19,21 +19,35 @@
 #include<assert.h>
 #define BUFFER_LENGTH 256 ///< The buffer length (crude but fine)
 
+#define RESET   "\033[0m"
+#define MAGENTA "\033[1;35m"
+
+#define MAX_VALUE 360
+
 static uint32_t receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
 void initialisePRU();
 void stopPRU();
 void startPRU();
 void uploadRootkit();
+void displayForSensor();
+char* getTextColor(float);
 int runBefore = 0;
-
-static char pipe_buf[128];
+char textColor[23];
 
 int main(int argc, char *argv[]){
     int sample_count;
+    
     if (argc != 2) {
         printf("Number of sensors please\n");
         return errno;
     }
+
+    int sensor_count = atoi(argv[1]);
+    if (sensor_count > 3 || sensor_count < 1) {
+        perror("Invalid sensor count.\n");
+        return errno;
+    }
+    
     //uploads the LKM
     uploadRootkit();
     initialisePRU();
@@ -42,30 +56,32 @@ int main(int argc, char *argv[]){
     printf("Starting device...\n");
     fd = open("/dev/rootkit", O_RDWR); // Open the device with read/write access
     if (fd < 0){
-        perror("Failed to open the device...");
+        perror("Failed to open the device...\n");
+        return errno;
+    }
+    char message[10];
+    sprintf(message, "%d", sensor_count);
+    if (write(fd, message, strlen(message)) < 0) {
+        perror("Failed to write sensor count to the device.\n");
         return errno;
     }
 
     while (1){
         printf("Enter the number of samples:");
-        scanf("%d", &sample_count);
 
-        if (argc != 2) {
-            printf("Number of sensors argument pwease");
+        if (scanf("%d", &sample_count) != 1) {
+            perror("That's not a number, silly\n");
             return errno;
         }
+        if (sample_count <= 0 || sample_count > 800 / sensor_count) {
+            perror("Sample count out of range\n");
+            continue;
+        }
 
-        char message[10];
         sprintf(message, "%d", sample_count);
-        if (sample_count <= 0 || sample_count > 100) {
-            printf("Sample count out of range\n");
-            return errno;
-        }
-
         printf("Writing message to the device [%s].\n", message);
-        ret = write(fd, message, strlen(message)); // Send the string to the LKM
-        if (ret < 0){
-            perror("Failed to write the message to the device.");
+        if (write(fd, message, strlen(message)) < 0){
+            perror("Failed to write sample count to the device.\n");
             return errno;
         }
 
@@ -73,6 +89,7 @@ int main(int argc, char *argv[]){
         startPRU();
 
         printf("Reading from the device...\n");
+
         int i, n;
         short revents;
         struct pollfd pfd;
@@ -80,25 +97,17 @@ int main(int argc, char *argv[]){
         pfd.events = POLLIN;
         i = poll(&pfd, 1, sample_count * 100);
         if (i == -1) {
-            perror("poll");
+            perror("Error polling device.\n");
             assert(0);
         }
         revents = pfd.revents;
         if (revents & POLLIN) {
-            n = read(pfd.fd, receive, sample_count);
-            printf("array:\n");
-            double sum = 0.0;
-            for (int i = 0; i < sample_count; i ++) {
-                uint32_t num = receive[i];
-
-                double scaled_down = num / 10000000.0;
-                sum += scaled_down;
-
-                printf("\t%.4fcm\n", scaled_down);
+            n = read(pfd.fd, receive, sample_count * sensor_count);
+            for (int i = 0; i < sensor_count; i ++) {
+                displayForSensor(sensor_count, sample_count, i);
             }
-            printf("\nAverage:\n\t%.4fcm\n", sum / sample_count);
         } else {
-            printf("Poll failed\n");
+            perror("Poll failed!\n");
         }
 
         printf("End of the program\n");
@@ -106,40 +115,95 @@ int main(int argc, char *argv[]){
     return 0;
 }
 
+void displayForSensor(int sensor_count, int sample_count, int n) {
+    printf(MAGENTA"\nSensor %d:\n"RESET, n + 1);
+    double sum = 0.0;
+    for (int i = 0; i < sample_count ; i ++) {
+        uint32_t num = receive[(i * sensor_count) + n];
+
+        double scaled_down = num / 10000000.0; 
+        sum += scaled_down;
+
+        printf("\t%s%.4fcm\t", getTextColor(scaled_down),scaled_down);
+        for (int i = 0; i < scaled_down; i += 3) {
+            printf("█");
+        }
+        printf(RESET "\n");
+    }
+    printf(MAGENTA "Average:\n"RESET"\t%s%.4fcm\n"RESET, getTextColor(sum / sample_count), sum / sample_count);
+}
+
 void uploadRootkit(){
+    char buffer[128];
+    // Change directory to ../LKM/
     FILE *pipe = popen("cd ../LKM && sh remove-rootkit.sh && sh upload-rootkit.sh", "r");
+
     if (pipe) {
-        while (fgets(pipe_buf, sizeof(pipe_buf), pipe) != NULL);
+        while (fgets(buffer, sizeof(buffer), pipe) != NULL) { }
         pclose(pipe);
-    } else { perror("Failed to upload rootkit"); }
+    } else {
+        perror("Failed to launch upload_firmware.sh");
+    }
 }
 
 void initialisePRU(){
+    char buffer[128];
+    // Change directory to ../pru/
     FILE *pipe = popen("cd ../pru && sh compile_script.sh", "r");
+
     if (pipe) {
-        while (fgets(pipe_buf, sizeof(pipe_buf), pipe) != NULL);
+        while (fgets(buffer, sizeof(buffer), pipe) != NULL) {}
         pclose(pipe);
-    } else { perror("Failed to initialize PRU"); }
+    } else {
+        perror("Failed to launch upload_firmware.sh");
+    }
 }
 
 void stopPRU(){
+    char buffer[128];
+    // Change directory to ../pru/
     FILE *pipe = popen("cd ../pru && sh stop_pru.sh", "r");
+
     if (pipe) {
-        while (fgets(pipe_buf, sizeof(pipe_buf), pipe) != NULL);
+        while (fgets(buffer, sizeof(buffer), pipe) != NULL) {}
         pclose(pipe);
-    } else { perror("Failed to stop PRU"); }
+    } else {
+        perror("Failed to launch upload_firmware.sh");
+    }
 }
 
 void startPRU(){
-    // TODO... do we really have to upload firmware EVERY time?
-    // FILE *pipe;
-    // if (runBefore) { pipe = popen("cd ../pru && sh start_pru.sh", "r"); }
-    // else { pipe = popen("cd ../pru && sh upload_firmware.sh", "r"); }
-
-    FILE *pipe = popen("cd ../pru && sh upload_firmware.sh", "r");
+    char buffer[128];
+    FILE *pipe;
+    pipe = popen("cd ../pru && sh upload_firmware.sh", "r");
     if (pipe) {
-        while (fgets(pipe_buf, sizeof(pipe_buf), pipe) != NULL);
+        while (fgets(buffer, sizeof(buffer), pipe) != NULL) {}
         pclose(pipe);
-    } else { perror("Failed to start PRU"); }
-    runBefore = 1; // compiler will totally unroll this, right?
+    } else {
+        perror("Failed to launch upload_firmware.sh");
+    }
+    runBefore = 1;
 }
+
+char* getTextColor(float value){
+    uint8_t r, g, b;
+    if(value < 60){
+        r = 255 - (value / 60.0 * 240);
+        g = (value / 60.0 * 240) + 15;
+        b = 15;
+    } else if (value < 180) {
+        r = 15;
+        g = 255 - ((value - 60.0) / 120.0 * 240);
+        b = ((value - 60.0) / 120.0 * 240)+ 15;
+    } else if (value < 360) {
+        r = ((value - 180.0) / 180.0 * 240)+ 15;
+        g = 15;
+        b = 255;
+    } else {
+        r = 255;
+        g = 15;
+        b = 255;
+    }
+    sprintf(textColor, "\033[38;2;%d;%d;%dm", r, g, b);
+    return textColor;
+} 
