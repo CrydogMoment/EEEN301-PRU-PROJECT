@@ -17,12 +17,12 @@
 #include<stdint.h>
 #include<poll.h>
 #include<assert.h>
-#define BUFFER_LENGTH 256 ///< The buffer length (crude but fine)
+#define BUFFER_LENGTH 800 ///< The buffer length (crude but fine)
 
 #define RESET   "\033[0m"
 #define MAGENTA "\033[1;35m"
 
-#define MAX_VALUE 360
+#define GRAPH_HEIGHT 36
 
 static uint32_t receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
 void initialisePRU();
@@ -30,9 +30,13 @@ void stopPRU();
 void startPRU();
 void uploadRootkit();
 void displayForSensor();
+char* magicRGB(uint32_t);
 char* getTextColor(float);
+void coolGraph(int, int);
 int runBefore = 0;
 char textColor[23];
+static uint32_t graph[800][GRAPH_HEIGHT];
+static int max_value;
 
 int main(int argc, char *argv[]){
     int sample_count;
@@ -103,8 +107,30 @@ int main(int argc, char *argv[]){
         revents = pfd.revents;
         if (revents & POLLIN) {
             n = read(pfd.fd, receive, sample_count * sensor_count);
+            
+            // init pixel graph
+            for (int i = 0; i < sample_count; i ++) { // clear it lol
+                for (int j = 0; j < GRAPH_HEIGHT; j ++) {
+                    graph[i][j] = 0;
+                }
+            }
+            max_value = 0;
+
             for (int i = 0; i < sensor_count; i ++) {
                 displayForSensor(sensor_count, sample_count, i);
+            }
+
+            printf( MAGENTA "\nREALLY COOL GRAPHS:\nCombined sensors:\n" RESET);
+            for (int i = (max_value/ (360 / GRAPH_HEIGHT)) - 1; i >= 0; i --) {
+                for (int j = 0; j < sample_count; j ++) {
+                    printf("%s█" RESET, magicRGB(graph[j][i]));
+                }
+                printf("\n");
+            }
+            if (sensor_count > 1) {
+                for (int i = 0; i < sensor_count; i ++) {
+                    coolGraph(i, sample_count);
+                }
             }
         } else {
             perror("Poll failed!\n");
@@ -115,17 +141,35 @@ int main(int argc, char *argv[]){
     return 0;
 }
 
-void displayForSensor(int sensor_count, int sample_count, int n) {
-    printf(MAGENTA"\nSensor %d:\n"RESET, n + 1);
+void coolGraph(int sensor_n, int sample_conut) {
+    printf( MAGENTA "\nSensor %d:\n" RESET, sensor_n + 1);
+    for (int i = (max_value/ (360 / GRAPH_HEIGHT)) - 1; i >= 0; i --) {
+        for (int j = 0; j < sample_conut; j ++) {
+            printf("%s█" RESET, magicRGB(graph[j][i] & (0xff << (sensor_n * 8))));
+        }
+        printf("\n");
+    }
+}
+
+void displayForSensor(int sensor_count, int sample_count, int sensor_n) {
+    printf(MAGENTA"\nSensor %d:\n"RESET, sensor_n + 1);
     double sum = 0.0;
     for (int i = 0; i < sample_count ; i ++) {
-        uint32_t num = receive[(i * sensor_count) + n];
+        uint32_t num = receive[(i * sensor_count) + sensor_n];
 
         double scaled_down = num / 10000000.0; 
         sum += scaled_down;
 
+        if (scaled_down > max_value) { max_value = scaled_down; }
+
+        for (int j = 0; j < GRAPH_HEIGHT; j ++) {
+            if (j * (360 / GRAPH_HEIGHT) <= scaled_down) {
+                graph[i][j] = graph[i][j] | (0xff << (sensor_n * 8));
+            }
+        }
+
         printf("\t%s%.4fcm\t", getTextColor(scaled_down),scaled_down);
-        for (int i = 0; i < scaled_down; i += 3) {
+        for (int j = 0; j < scaled_down; j += 3) {
             printf("█");
         }
         printf(RESET "\n");
@@ -185,7 +229,15 @@ void startPRU(){
     runBefore = 1;
 }
 
-char* getTextColor(float value){
+char* magicRGB(uint32_t pixel) {
+    uint8_t r = pixel & 0xff;
+    uint8_t g = (pixel & 0xff00) >> 8;
+    uint8_t b = (pixel & 0xff0000) >> 16;
+    sprintf(textColor, "\033[38;2;%d;%d;%dm", r, g, b);
+    return textColor;
+}
+
+char* getTextColor(float value) {
     uint8_t r, g, b;
     if(value < 60){
         r = 255 - (value / 60.0 * 240);
