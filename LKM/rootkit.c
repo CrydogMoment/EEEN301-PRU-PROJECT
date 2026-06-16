@@ -42,21 +42,25 @@ static struct device* ebbcharDevice = NULL; // The device-driver device struct p
 static unsigned int gpio_interrupt = 48;     // P9_15 pin that goes low at the end of PRU program
 static unsigned int irq_number;              // share IRQ num within file
 
-// Prototype functions for the character driver (must come before the struct definition)
-static int          dev_open(struct inode *, struct file *);
-static int          dev_release(struct inode *, struct file *);
-static ssize_t      dev_read(struct file *, char *, size_t, loff_t *);
-static ssize_t      dev_write(struct file *, const char *, size_t, loff_t *);
+// Prototype functions for the character driver -- must come before the struct definition
+static int     dev_open(struct inode *, struct file *);
+static int     dev_release(struct inode *, struct file *);
+static ssize_t dev_read(struct file *, char *, size_t, loff_t *);
+static ssize_t dev_write(struct file *, const char *, size_t, loff_t *);
 static unsigned int dev_poll(struct file *file, poll_table *wait);
+
+// prototype for the custom IRQ handler function, function below
 static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs);
 
-// For writing to shared RAM
-#define PRUSS_SHARED_RAM_PADDR 0x4A300000   // absolute address to PRU shared RAM address
-#define PRUSS_SHARED_RAM_SIZE  0x2EE0       // 12 KB
+//added for writing to shared RAM
+#define PRUSS_SHARED_RAM_PADDR 0x4A300000
+#define PRUSS_SHARED_RAM_SIZE  0x3000 // 12 KB
+
 void __iomem *shared_ram_vaddr;
 
 static DECLARE_WAIT_QUEUE_HEAD(rootkit_wait);
 static int data_ready = 0;
+static int recieved_num_sensors = 0;
 
 /** @brief Devices are represented as file structure in the kernel. The file_operations structure from
  *  /linux/fs.h lists the callback functions that you wish to be associated with your file operations
@@ -72,15 +76,16 @@ static struct file_operations fops =
 };
 
 static unsigned int dev_poll(struct file *file, poll_table *wait) {
-    printk(KERN_INFO "rootkit: Poll");
+    printk(KERN_INFO "rootkit: poll");
     poll_wait(file, &rootkit_wait, wait);
 
+    // you should return POLLIN | POLLRDNORM if you have some new data to read, and 0 in case there is no new data to read
     if (data_ready == 1) {
         printk(KERN_INFO "rootkit: Data ready!");
         data_ready = 0;
         return POLLIN | POLLRDNORM;
     }
-    printk(KERN_INFO "rootkit: Data not ready.");
+    printk(KERN_INFO "rootkit: Poll return 0");
     return 0;
 }
 
@@ -91,9 +96,10 @@ static unsigned int dev_poll(struct file *file, poll_table *wait) {
  *  @return returns 0 if successful
  */
 static int __init ebbchar_init(void){
+    int result;
    printk(KERN_INFO "rootkit: Initializing the rootkit LKM\n");
 
-   // Try to dynamically allocate a major number for the device
+   // Try to dynamically allocate a major number for the device -- more difficult but worth it
    majorNumber = register_chrdev(0, DEVICE_NAME, &fops);
    if (majorNumber<0){
       printk(KERN_ERR "rootkit: failed to register a major number\n");
@@ -103,17 +109,17 @@ static int __init ebbchar_init(void){
 
    // Register the device class
    ebbcharClass = class_create(THIS_MODULE, CLASS_NAME);
-   if (IS_ERR(ebbcharClass)) {  // Clean up if there is an error
+   if (IS_ERR(ebbcharClass)){                // Check for error and clean up if there is
       unregister_chrdev(majorNumber, DEVICE_NAME);
       printk(KERN_ERR "rootkit: Failed to register device class\n");
-      return PTR_ERR(ebbcharClass);
+      return PTR_ERR(ebbcharClass);          // Correct way to return an error on a pointer
    }
    printk(KERN_INFO "rootkit: device class registered correctly\n");
 
    // Register the device driver
    ebbcharDevice = device_create(ebbcharClass, NULL, MKDEV(majorNumber, 0), NULL, DEVICE_NAME);
-   if (IS_ERR(ebbcharDevice)) {
-      class_destroy(ebbcharClass);  // Now repeated code, could goto as alternative
+   if (IS_ERR(ebbcharDevice)){               // Clean up if there is an error
+      class_destroy(ebbcharClass);           // Repeated code but the alternative is goto statements
       unregister_chrdev(majorNumber, DEVICE_NAME);
       printk(KERN_ERR "rootkit: Failed to create the device\n");
       return PTR_ERR(ebbcharDevice);
@@ -121,6 +127,7 @@ static int __init ebbchar_init(void){
 
    // Map physical address to kernel virtual address
    shared_ram_vaddr = ioremap(PRUSS_SHARED_RAM_PADDR, PRUSS_SHARED_RAM_SIZE);
+
    if (!shared_ram_vaddr) {
       printk(KERN_ERR "rootkit: Failed to map shared RAM\n");
       return -ENOMEM;
@@ -128,23 +135,24 @@ static int __init ebbchar_init(void){
 
    printk(KERN_INFO "rootkit: button value is currently: %d\n",
    gpio_get_value(gpio_interrupt));
-   irq_number = gpio_to_irq(gpio_interrupt);    // map GPIO to IRQ number
+   irq_number = gpio_to_irq(gpio_interrupt); // map GPIO to IRQ number
    printk(KERN_INFO "rootkit: button mapped to IRQ: %d\n", irq_number);
 
-   // Request an interrupt line
-   int result = request_irq(irq_number,         // interrupt number requested
-        (irq_handler_t) ebb_gpio_irq_handler,   // handler function
-        IRQF_TRIGGER_FALLING,                   // on FALLING edge!
-        "ebb_gpio_handler",                     // used in /proc/interrupts
-        NULL);                                  // *dev_id for shared interrupt lines (N/A)
+   // This next call requests an interrupt line
+   result = request_irq(irq_number,                  // interrupt number requested
+            (irq_handler_t) ebb_gpio_irq_handler,   // handler function
+            IRQF_TRIGGER_FALLING,                    // on rising edge (press, not release)
+            "ebb_gpio_handler",                     // used in /proc/interrupts
+            NULL);                                  // *dev_id for shared interrupt lines
    printk(KERN_INFO "rootkit: IRQ request result is: %d\n", result);
    return result;
 }
 
 static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs) {
     printk(KERN_INFO "rootkit: PRU Interrupt Picked up by LKM!\n");
-    data_ready = 1;
-    wake_up(&rootkit_wait);
+   data_ready = 1;
+   wake_up(&rootkit_wait);
+
     return (irq_handler_t) IRQ_HANDLED;
 }
 
@@ -153,7 +161,9 @@ static irq_handler_t ebb_gpio_irq_handler(unsigned int irq, void *dev_id, struct
  *  code is used for a built-in driver (not a LKM) that this function is not required.
  */
 static void __exit ebbchar_exit(void){
-   if (shared_ram_vaddr) { iounmap(shared_ram_vaddr); }
+   if (shared_ram_vaddr) {
+      iounmap(shared_ram_vaddr);
+   }
 
    free_irq(irq_number, NULL);
    device_destroy(ebbcharClass, MKDEV(majorNumber, 0));     // remove the device
@@ -182,13 +192,13 @@ static int dev_open(struct inode *inodep, struct file *filep){
  *  @param offset The offset if required
  */
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset) {
-    printk(KERN_INFO "rootkit: Read\n");
     int error_count = 0;
+    printk(KERN_INFO "rootkit: Read\n");
 
     u32 vals[len];
     int i = 0;
     while (i < len) {
-        vals[i] = readl(shared_ram_vaddr + (i * 4) + 8);
+        vals[i] = readl(shared_ram_vaddr + (i * 4) + 12);
         i ++;
     }
     error_count = copy_to_user(buffer, vals, len*4);
@@ -230,6 +240,9 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 
     //  null-terminate the string so parsing functions work safely
     kbuf[len] = '\0';
+
+    //    Convert the ASCII string into an actual integer
+    //    kstrtoint handles white spaces and returns 0 on success
     if (kstrtoint(kbuf, 10, &user_value) != 0) {
         printk(KERN_ALERT "rootkit: Invalid integer string received\n");
         return -EINVAL;
@@ -237,8 +250,15 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 
     // write the actual integer value to the PRU Shared RAM
     if (shared_ram_vaddr) {
-        writel(user_value, shared_ram_vaddr);
-        printk(KERN_INFO "rootkit: Wrote integer %d to Shared RAM address: %pa\n", user_value, shared_ram_vaddr);
+        if(recieved_num_sensors != 0){
+            writel(user_value, shared_ram_vaddr);
+            printk(KERN_INFO "rootkit: Wrote integer %d to Shared RAM address: %pa\n", user_value, shared_ram_vaddr);
+        }else{
+            writel(user_value, shared_ram_vaddr + 8);
+            printk(KERN_INFO "rootkit: Wrote integer %d to Shared RAM address: %pa\n", user_value, shared_ram_vaddr + 8);
+            recieved_num_sensors = user_value;
+        }
+        
     } else {
         printk(KERN_ALERT "rootkit: Shared RAM pointer is NULL\n");
         return -EIO;
