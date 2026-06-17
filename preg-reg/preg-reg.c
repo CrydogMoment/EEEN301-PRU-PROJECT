@@ -77,7 +77,7 @@ int main(int argc, char *argv[]){
             perror("That's not a number, silly\n");
             return errno;
         }
-        if (sample_count <= 0 || sample_count > 800 / sensor_count) {
+        if (sample_count <= 0 || sample_count > 600 / sensor_count) {
             perror("Sample count out of range\n");
             continue;
         }
@@ -123,7 +123,7 @@ int main(int argc, char *argv[]){
             printf( MAGENTA "\nREALLY COOL GRAPHS:\nCombined sensors:\n" RESET);
             for (int i = (max_value/ (360 / GRAPH_HEIGHT)) - 1; i >= 0; i --) {
                 for (int j = 0; j < sample_count; j ++) {
-                    printf("%s█" RESET, magicRGB(graph[j][i]));
+                    printf("%sâ–ˆ" RESET, magicRGB(graph[j][i]));
                 }
                 printf("\n");
             }
@@ -145,7 +145,7 @@ void coolGraph(int sensor_n, int sample_conut) {
     printf( MAGENTA "\nSensor %d:\n" RESET, sensor_n + 1);
     for (int i = (max_value/ (360 / GRAPH_HEIGHT)) - 1; i >= 0; i --) {
         for (int j = 0; j < sample_conut; j ++) {
-            printf("%s█" RESET, magicRGB(graph[j][i] & (0xff << (sensor_n * 8))));
+            printf("%sâ–ˆ" RESET, magicRGB(graph[j][i] & (0xff << (sensor_n * 8))));
         }
         printf("\n");
     }
@@ -170,7 +170,7 @@ void displayForSensor(int sensor_count, int sample_count, int sensor_n) {
 
         printf("\t%s%.4fcm\t", getTextColor(scaled_down),scaled_down);
         for (int j = 0; j < scaled_down; j += 3) {
-            printf("█");
+            printf("â–ˆ");
         }
         printf(RESET "\n");
     }
