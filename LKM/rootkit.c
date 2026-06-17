@@ -193,10 +193,12 @@ static int dev_open(struct inode *inodep, struct file *filep){
  */
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset) {
     int error_count = 0;
+    u32 vals[600];
+    int i = 0;
     printk(KERN_INFO "rootkit: Read\n");
 
-    u32 vals[len];
-    int i = 0;
+    
+    
     while (i < len) {
         vals[i] = readl(shared_ram_vaddr + (i * 4) + 12);
         i ++;
